@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block title %}{{ job.title }} — PausePalette{% endblock %}
+{% block content %}
+
+<section class="card">
+  <h1>{{ job.title }}</h1>
+  <div class="stats">
+    <div><span class="k">Stage</span><span class="v">{{ job.stage }}</span></div>
+    <div><span class="k">Printer</span><span class="v">{{ job.printer_model or '—' }}</span></div>
+    <div><span class="k">Slots</span><span class="v">{{ job.slots }}</span></div>
+    <div><span class="k">Pauses</span><span class="v">{{ job.pauses if job.pauses is defined else '—' }}</span></div>
+    <div><span class="k">Swaps</span><span class="v">{{ job.swaps if job.swaps is defined else '—' }}</span></div>
+    <div><span class="k">Position moves</span><span class="v">{{ job.moves if job.moves is defined else '—' }}</span></div>
+  </div>
+</section>
+
+{% if job.stage == 'planned' %}
+<section class="card">
+  <h2><span class="step">2</span> In Bambu Studio</h2>
+  <ol class="steps">
+    {% for s in instructions %}<li>{{ s }}</li>{% endfor %}
+  </ol>
+  <div class="downloads">
+    <a class="btn" href="/job/{{ job.id }}/download/reordered.3mf">Download reordered project</a>
+    <a class="btn ghost" href="/job/{{ job.id }}/download/plan.md">Plan (markdown)</a>
+    <a class="btn ghost" href="/job/{{ job.id }}/download/plan.json">Plan (json)</a>
+    <a class="btn ghost" href="/job/{{ job.id }}/download/project.3mf">Original project</a>
+  </div>
+  {% if job.reorder_report %}
+  <details>
+    <summary>What the reorder changed</summary>
+    <ul class="muted">
+      <li>filament arrays permuted: {{ job.reorder_report.json_keys_permuted | length }}</li>
+      <li>filament references remapped: {{ job.reorder_report.references_remapped }}</li>
+      <li>stale slice entries stripped: {{ job.reorder_report.slices_stripped | join(', ') or 'none' }}</li>
+      {% for w in job.reorder_report.warnings %}<li>warning: {{ w }}</li>{% endfor %}
+    </ul>
+  </details>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2><span class="step">3</span> Upload the slice back</h2>
+  <p class="muted">After slicing and exporting the plate sliced file, upload it here.
+     PausePalette checks it against the plan before touching it.</p>
+  <form action="/job/{{ job.id }}/slice" method="post" enctype="multipart/form-data">
+    <label>Sliced file (.gcode or .3mf)
+      <input type="file" name="slice_file" accept=".gcode,.3mf,text/plain,application/zip" required>
+    </label>
+    <button type="submit">Verify &amp; insert pauses</button>
+  </form>
+</section>
+{% endif %}
+
+{% if plan %}
+<section class="card">
+  <h2>Colour plan</h2>
+  <p><strong>Initial AMS load:</strong>
+    {% for tool in plan.initial %}{% if tool is not none %}Pos{{ loop.index }} {{ plan.tool_name(tool) }}{% if not loop.last %}, {% endif %}{% endif %}{% endfor %}
+  </p>
+  {% if plan.pauses %}
+  <table>
+    <thead><tr><th>#</th><th>Pause before</th><th>Layer</th><th>Swaps</th></tr></thead>
+    <tbody>
+    {% for p in plan.pauses %}
+      <tr>
+        <td>{{ p.index }}</td>
+        <td>T{{ p.tool }} {{ plan.tool_name(p.tool) }}</td>
+        <td>{{ p.layer }}</td>
+        <td>{% for s in p.swaps %}<div>{{ s.describe() }}</div>{% endfor %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="ok">All colours fit in the AMS — no pauses are needed.</p>
+  {% endif %}
+  {% if plan.warnings %}<ul class="muted">{% for w in plan.warnings %}<li>{{ w }}</li>{% endfor %}</ul>{% endif %}
+</section>
+{% endif %}
+
+{% if report %}
+<section class="card">
+  <h2>Verification</h2>
+  <p class="{% if report.ok %}ok{% else %}bad{% endif %}">
+    {% if report.ok %}All checks passed.{% else %}Checks failed — do not print this file.{% endif %}
+  </p>
+  <table>
+    <thead><tr><th>Check</th><th>Result</th><th>Detail</th></tr></thead>
+    <tbody>
+    {% for c in report.checks %}
+      <tr><td>{{ c.name }}</td><td>{{ 'ok' if c.ok else 'FAIL' }}</td><td class="muted">{{ c.detail }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="card">
+  <h2>Output</h2>
+  <div class="downloads">
+    <a class="btn" href="/job/{{ job.id }}/download/output.gcode">Download {{ job.output_name }}</a>
+    <a class="btn ghost" href="/job/{{ job.id }}/download/checklist.md">Swap checklist</a>
+  </div>
+  <details open>
+    <summary>Swap checklist</summary>
+    <pre class="checklist">{{ checklist }}</pre>
+  </details>
+</section>
+{% endif %}
+
+{% if job.notes %}
+<section class="card"><h2>Notes</h2><ul class="muted">{% for n in job.notes %}<li>{{ n }}</li>{% endfor %}</ul></section>
+{% endif %}
+
+{% endblock %}

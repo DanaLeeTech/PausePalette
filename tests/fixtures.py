@@ -28,41 +28,54 @@ HEAD_LAYERS = {
 TAIL_LAYERS = {n: [0, 8] for n in range(4, 16)}
 TOTAL_LAYERS = 15
 
-TEMP = {"Bambu Lab A1": 220}
 Z_HOP = "0.6"
 
 
-def tool_block(tool: int, z: str = Z_HOP, temp: int = 220) -> list[str]:
+def tool_block(tool: int, z: str = Z_HOP, temp: int = 220, as_tool: int | None = None) -> list[str]:
+    """A Bambu-style tool-change block.
+
+    ``as_tool`` writes a different T number while leaving everything else the
+    same — used to simulate a re-slice after the filament list was reordered.
+    """
     slot = tool + 1
+    written = tool if as_tool is None else as_tool
+    written_slot = written + 1
     return [
         ";===== A1 20251031",
-        f"M620 S{tool}A",
+        f"M620 S{written}A",
         "M204 S10000",
         f"G1 Z{z} F1200",
         f"M104 S{temp}",
-        f"T{tool}",
-        f"M621 S{tool}A",
-        f"M620.11 S1 I{slot} E-30 F1200",
+        f"T{written}",
+        f"M621 S{written}A",
+        f"M620.11 S1 I{written_slot} E-30 F1200",
         "G1 X100 F18000",
         "G1 X-28.5 F18000",
-        f"M620.11 S1 I{slot} E30 F1200",
+        f"M620.11 S1 I{written_slot} E30 F1200",
         "M628 S1",
         "G92 E0",
         "G1 E10 F500",
         "M400",
         "M629 S1",
-        f"G1 X120 E5 F1800 ; printing with T{tool}",
+        f"G1 X120 E5 F1800 ; printing with T{written}",
     ]
 
 
-def keychain_gcode() -> str:
+def keychain_gcode(remap: dict[int, int] | None = None, filaments: list[str] | None = None) -> str:
+    """The keychain G-code.
+
+    ``remap`` rewrites each tool number (simulating a re-slice after the
+    filament list was permuted) and ``filaments`` overrides the header list.
+    """
+    remap = remap or {}
+    filaments = filaments or FILAMENTS
     lines: list[str] = [
         "; HEADER_BLOCK_START",
         "; BambuStudio 02.01.00.00",
         "; printer_model = Bambu Lab A1",
         f"; total layer number: {TOTAL_LAYERS}",
-        "; filament_colour = " + ";".join(FILAMENTS),
-        f"; total_filament = {len(FILAMENTS)}",
+        "; filament_colour = " + ";".join(filaments),
+        f"; total_filament = {len(filaments)}",
         "; HEADER_BLOCK_END",
         "; CONFIG_BLOCK_START",
         "; machine_pause_gcode = M400 U1",
@@ -77,7 +90,7 @@ def keychain_gcode() -> str:
         lines.append(f"; layer num/total_layer_count: {layer}/{TOTAL_LAYERS}")
         lines.append(f"G1 Z{layer * 0.2:.1f} F1200 ; layer {layer}")
         for tool in layers[layer]:
-            lines.extend(tool_block(tool))
+            lines.extend(tool_block(tool, as_tool=remap.get(tool, tool)))
         lines.append("; infill")
         lines.append("G1 X50 E2 F1800")
     lines.append("; end of print - unload")

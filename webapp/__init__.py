@@ -1,0 +1,1 @@
+"""PausePalette web application package."""

@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}PausePalette{% endblock %}</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="/">PausePalette</a>
+    <span class="tag">offline colour planner &amp; pause inserter for Bambu / Orca AMS</span>
+  </header>
+  <main>
+    {% if error %}<div class="banner error"><strong>Stopped:</strong> {{ error }}</div>{% endif %}
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="bottom">
+    Print from file. Never re-slice the edited G-code. No AI, no network, no slicer.
+  </footer>
+</body>
+</html>

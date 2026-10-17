@@ -89,7 +89,15 @@ def _write_zip(entries: dict[str, bytes], original: bytes) -> bytes:
 
 def read_project(data: bytes) -> ProjectInfo:
     info = ProjectInfo()
-    entries = _read_zip(data)
+    if not looks_like_zip(data):
+        raise StopAndExplain(
+            "that file is not a .3mf project (it is not a zip archive). Upload "
+            "the project saved from Bambu Studio / OrcaSlicer."
+        )
+    try:
+        entries = _read_zip(data)
+    except zipfile.BadZipFile as exc:
+        raise StopAndExplain(f"could not read the .3mf archive ({exc})") from exc
     info.entries = list(entries)
 
     if PROJECT_SETTINGS not in entries:
@@ -236,3 +244,20 @@ def expected_colour_permutation(
     filaments: list[str], new_order: list[int]
 ) -> list[str]:
     return [filaments[i] for i in new_order]
+
+
+def extract_slice(data: bytes) -> tuple[str, str] | None:
+    """If ``data`` is a 3mf, return (name, gcode text) for its embedded slice."""
+    try:
+        entries = _read_zip(data)
+    except zipfile.BadZipFile:
+        return None
+    names = [n for n in entries if SLICE_FILES.match(n) and n.endswith(".gcode")]
+    if not names:
+        return None
+    name = sorted(names)[0]
+    return name, entries[name].decode("utf-8", errors="replace")
+
+
+def looks_like_zip(data: bytes) -> bool:
+    return data[:2] == b"PK"

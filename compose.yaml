@@ -1,0 +1,26 @@
+services:
+  pausepalette:
+    build: .
+    image: pausepalette:0.1.0
+    ports:
+      - "8000:8000"
+    environment:
+      PAUSEPALETTE_DATA: /data/jobs
+    volumes:
+      - pausepalette-data:/data
+      # To keep job files on the host instead, comment the line above and use:
+      # - ./data:/data
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=4).status == 200 else 1)"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+
+volumes:
+  pausepalette-data:

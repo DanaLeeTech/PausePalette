@@ -118,6 +118,17 @@ class Plan:
     expected_filament_order: list[str] = field(default_factory=list)  # hex, new T order
     printer_model: str | None = None
 
+    # Presentation helpers (new T numbering).
+    filament_colour: list[str] = field(default_factory=list)
+    filament_name: list[str] = field(default_factory=list)
+
+    def tool_name(self, tool: int | None) -> str:
+        if tool is None:
+            return "empty"
+        if 0 <= tool < len(self.filament_name):
+            return self.filament_name[tool]
+        return f"T{tool}"
+
 
 @dataclass
 class InsertionResult:

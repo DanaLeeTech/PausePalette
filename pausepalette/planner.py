@@ -95,10 +95,6 @@ def plan_slots(
     states: list[dict[frozenset[int], _Node]] = [dict() for _ in range(len(demands) + 1)]
     states[0][initial_set] = _Node(INITIAL_COST, -1, None, "start")
 
-    suffix_tools: list[set[int]] = [set() for _ in range(len(demands) + 1)]
-    for i in range(len(demands) - 1, -1, -1):
-        suffix_tools[i] = suffix_tools[i + 1] | {demands[i]}
-
     def relax(i: int, key: frozenset[int], node: _Node) -> None:
         bucket = states[i]
         cur = bucket.get(key)
@@ -108,6 +104,16 @@ def plan_slots(
     for i in range(len(demands)):
         need = demands[i]
         demanded_before = set(demands[:i])
+        # Only a bounded lookahead of colours is worth preloading: a colour further
+        # out than the next few distinct demands cannot lengthen the coverage of
+        # this pause, so enumerating the whole suffix is wasted work.
+        window = max(slots - 1, 2 * slots)
+        extras_pool: list[int] = []
+        for t in demands[i + 1 :]:
+            if t != need and t not in extras_pool:
+                extras_pool.append(t)
+                if len(extras_pool) >= window:
+                    break
         for loaded, node in list(states[i].items()):
             if need in loaded:
                 relax(
@@ -117,7 +123,6 @@ def plan_slots(
                 )
             if i == 0:
                 continue
-            extras_pool = sorted(suffix_tools[i] - {need})
             for k in range(0, min(slots - 1, len(extras_pool)) + 1):
                 for extra in itertools.combinations(extras_pool, k):
                     new_set = frozenset((need, *extra))
