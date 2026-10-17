@@ -43,19 +43,38 @@ REF_TAG_RE = re.compile(
 
 
 @dataclass
+class PlateInfo:
+    id: int
+    name: str | None = None
+    gcode_name: str | None = None
+    has_gcode: bool = False
+    # Bambu's own print-order metadata (1-based filament ids)
+    first_layer_sequence: list[int] = field(default_factory=list)
+    sequence: list[int] = field(default_factory=list)  # full flat sequence
+
+
+@dataclass
 class ProjectInfo:
     filaments: list[str] = field(default_factory=list)
     filament_names: list[str] = field(default_factory=list)
     printer_model: str | None = None
     extruder_count: int = 1
+    plates: list[PlateInfo] = field(default_factory=list)
     has_slice: bool = False
     slice_names: list[str] = field(default_factory=list)
     slice_gcode: str | None = None
+    plate: int = 1
     entries: list[str] = field(default_factory=list)
     reference_count: int = 0
     reference_keys: dict[str, int] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
     ok: bool = False
+
+    def plate_by_id(self, plate_id: int) -> PlateInfo | None:
+        for p in self.plates:
+            if p.id == plate_id:
+                return p
+        return None
 
 
 @dataclass
@@ -87,7 +106,60 @@ def _write_zip(entries: dict[str, bytes], original: bytes) -> bytes:
     return out.getvalue()
 
 
-def read_project(data: bytes) -> ProjectInfo:
+def _parse_plates(entries: dict[str, bytes]) -> list[PlateInfo]:
+    """Discover plates: model_settings `<plate>` entries plus plate_*.gcode files."""
+    plates: dict[int, PlateInfo] = {}
+
+    def get(pid: int) -> PlateInfo:
+        if pid not in plates:
+            plates[pid] = PlateInfo(id=pid)
+        return plates[pid]
+
+    blob = entries.get(MODEL_SETTINGS)
+    if blob:
+        text = blob.decode("utf-8", errors="replace")
+        for m in re.finditer(r"<plate>(.*?)</plate>", text, re.S):
+            block = m.group(1)
+            meta = dict(
+                (k, v) for k, v in re.findall(r'key="([^"]+)"\s+value="([^"]*)"', block)
+            )
+            try:
+                pid = int(meta.get("plater_id", "1"))
+            except ValueError:
+                continue
+            plate = get(pid)
+            plate.name = meta.get("plater_name") or plate.name
+            plate.gcode_name = meta.get("gcode_file") or plate.gcode_name
+            fls = meta.get("first_layer_print_sequence", "")
+            if fls:
+                plate.first_layer_sequence = [int(x) for x in fls.split() if x.isdigit()]
+
+    # filament_sequence.json carries the full per-plate tool sequence (1-based)
+    seq_blob = entries.get("Metadata/filament_sequence.json")
+    if seq_blob:
+        try:
+            seq = json.loads(seq_blob.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            seq = {}
+        if isinstance(seq, dict):
+            for key, value in seq.items():
+                m = re.match(r"plate_(\d+)$", key)
+                if not m or not isinstance(value, dict):
+                    continue
+                raw = value.get("sequence")
+                if isinstance(raw, list) and all(isinstance(x, int) for x in raw):
+                    get(int(m.group(1))).sequence = list(raw)
+
+    for name in entries:
+        m = re.match(r"^Metadata/plate_(\d+)\.gcode$", name)
+        if m:
+            plate = get(int(m.group(1)))
+            plate.has_gcode = True
+            plate.gcode_name = plate.gcode_name or name
+    return [plates[k] for k in sorted(plates)]
+
+
+def read_project(data: bytes, plate: int = 1) -> ProjectInfo:
     info = ProjectInfo()
     if not looks_like_zip(data):
         raise StopAndExplain(
@@ -137,16 +209,25 @@ def read_project(data: bytes) -> ProjectInfo:
                 info.reference_count += 1
                 info.reference_keys[key] = info.reference_keys.get(key, 0) + 1
 
-    # embedded slice
+    # embedded slice(s)
     for name in info.entries:
         if SLICE_FILES.match(name):
             info.slice_names.append(name)
-    info.has_slice = bool(info.slice_names)
-    if info.has_slice:
-        # prefer the first plate's gcode
-        for name in sorted(info.slice_names):
-            if name.endswith(".gcode"):
-                info.slice_gcode = entries[name].decode("utf-8", errors="replace")
+    info.plates = _parse_plates(entries)
+    info.plate = plate
+    chosen = info.plate_by_id(plate)
+    info.has_slice = bool(chosen and chosen.has_gcode)
+    if info.has_slice and chosen and chosen.gcode_name:
+        blob = entries.get(chosen.gcode_name)
+        if blob is not None:
+            info.slice_gcode = blob.decode("utf-8", errors="replace")
+    if info.slice_gcode is None:
+        # fall back to the first plate that has a slice
+        for p in info.plates:
+            if p.has_gcode and p.gcode_name and p.gcode_name in entries:
+                info.plate = p.id
+                info.has_slice = True
+                info.slice_gcode = entries[p.gcode_name].decode("utf-8", errors="replace")
                 break
 
     if not info.printer_model and info.slice_gcode:
@@ -246,8 +327,8 @@ def expected_colour_permutation(
     return [filaments[i] for i in new_order]
 
 
-def extract_slice(data: bytes) -> tuple[str, str] | None:
-    """If ``data`` is a 3mf, return (name, gcode text) for its embedded slice."""
+def extract_slice(data: bytes, plate: int | None = None) -> tuple[str, str] | None:
+    """If ``data`` is a 3mf, return (name, gcode text) for an embedded slice."""
     try:
         entries = _read_zip(data)
     except zipfile.BadZipFile:
@@ -255,6 +336,10 @@ def extract_slice(data: bytes) -> tuple[str, str] | None:
     names = [n for n in entries if SLICE_FILES.match(n) and n.endswith(".gcode")]
     if not names:
         return None
+    if plate is not None:
+        wanted = f"Metadata/plate_{plate}.gcode"
+        if wanted in entries:
+            return wanted, entries[wanted].decode("utf-8", errors="replace")
     name = sorted(names)[0]
     return name, entries[name].decode("utf-8", errors="replace")
 

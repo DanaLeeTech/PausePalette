@@ -10,6 +10,7 @@ from .model import GcodeFile, InsertionResult, Plan, VerificationReport
 RE_M400U1 = re.compile(r"^M400 U1\b")
 RE_SWAP_START = re.compile(r"^; ===== MANUAL SPOOL SWAP (\d+) of (\d+) =====")
 RE_SWAP_END = re.compile(r"^; ===== END MANUAL SPOOL SWAP (\d+) =====")
+RE_DISABLED_FORM = re.compile(r"^M620\.11 S0\b")
 DISABLED = "M620.11 S0 ; filament already unloaded at pause"
 
 
@@ -97,7 +98,8 @@ def verify(original: GcodeFile, result: InsertionResult, plan: Plan) -> Verifica
                 )
     report.add("pause blocks anchored before the right tool change", ok_anchor, "; ".join(detail))
 
-    # 5. step-D edits present in each anchored block
+    # 5. unload and re-feed disabled in each anchored block (either our marker or
+    #    the slicer's own 'M620.11 S0' for filaments with no long retraction)
     ok_d = True
     detail = []
     for pause in plan.pauses:
@@ -106,7 +108,7 @@ def verify(original: GcodeFile, result: InsertionResult, plan: Plan) -> Verifica
             ok_d = False
             continue
         span = edited.lines[block.header_line : block.end_line + 1]
-        count = sum(1 for ln in span if ln.strip() == DISABLED)
+        count = sum(1 for ln in span if RE_DISABLED_FORM.match(ln.strip()))
         if count != 2:
             ok_d = False
             detail.append(f"T{block.tool}: {count} disabled lines, expected 2")

@@ -23,6 +23,7 @@ class ToolChange:
     tool: int                       # T<n>
     layer: int                      # layer the block sits in
     demand_index: int               # index after collapsing consecutive same-tool runs
+    tool_line: int | None = None    # index of the 'T<n>' line
     unload_line: int | None = None  # 'M620.11 S1 I<n> E-<dist>' line
     refeed_start: int | None = None # first line of the re-feed group
     refeed_end: int | None = None   # last line of the re-feed group
@@ -121,6 +122,14 @@ class Plan:
     # Presentation helpers (new T numbering).
     filament_colour: list[str] = field(default_factory=list)
     filament_name: list[str] = field(default_factory=list)
+
+    # Where the plan came from.
+    plate: int | None = None
+    provisional: bool = False   # planned from Bambu's sequence metadata, no anchors yet
+    deferred: bool = False      # no sequence available: plan at stage 3
+    expected_demands: list[int] = field(default_factory=list)  # collapsed sequence
+    original_filaments: list[str] = field(default_factory=list)
+    original_names: list[str] = field(default_factory=list)
 
     def tool_name(self, tool: int | None) -> str:
         if tool is None:

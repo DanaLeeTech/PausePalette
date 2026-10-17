@@ -63,9 +63,52 @@ def test_reorder_detects_bad_permutation():
         threemf.reorder_project(build_3mf(), [0, 1, 2])
 
 
-def test_stage1_missing_slice_stops():
-    with pytest.raises(StopAndExplain):
-        plan_from_project(build_3mf(sliced=False), slots=4)
+def test_unsliced_project_is_accepted():
+    project = build_3mf(sliced=False)
+    stage1 = plan_from_project(project, slots=4)
+    plan = stage1.plan
+    assert plan.deferred
+    assert plan.pauses == []
+    assert len(plan.filament_colour) == 9
+    # a reordered project is still produced (with the stale slice absent anyway)
+    assert stage1.reordered_project[:2] == b"PK"
+    assert any("not sliced" in n for n in stage1.notes)
+
+
+def test_unsliced_project_defers_then_plans_on_slice():
+    project = build_3mf(sliced=False)
+    plan = plan_from_project(project, slots=4).plan
+    assert plan.deferred
+    # the order came from the stored first-layer sequence, so the user slices
+    # with that order and uploads the slice: the plan is finalised for real
+    old_to_new = {FILAMENTS.index(h): i for i, h in enumerate(plan.filament_colour)}
+    resliced = keychain_gcode(remap=old_to_new, filaments=plan.filament_colour)
+    result = insert_into_slice(resliced.encode("utf-8"), plan)
+    assert result.report.ok, result.report.failures()
+    assert result.edited.inserted_blocks == 6
+    assert result.plan is not None and not result.plan.deferred
+
+
+def test_unsliced_with_sequence_json_is_provisional():
+    project = build_3mf(sliced=False, sequence_json=True)
+    stage1 = plan_from_project(project, slots=4)
+    plan = stage1.plan
+    assert plan.provisional
+    # the sequence is Bambu's own first-layer order; the plan is exact on pauses
+    assert plan.expected_demands
+    assert len(plan.pauses) >= 1
+
+
+def test_plate_selection():
+    project = build_3mf()
+    info = threemf.read_project(project, plate=1)
+    assert info.plate == 1
+    assert info.has_slice
+    assert [p.id for p in info.plates] == [1]
+    assert info.plate_by_id(1).name == "Keychain"
+    # asking for a plate that does not exist falls back to the one that is sliced
+    info2 = threemf.read_project(project, plate=2)
+    assert info2.has_slice
 
 
 def test_full_two_stage_flow():

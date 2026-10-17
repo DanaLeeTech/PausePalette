@@ -20,27 +20,32 @@ RE_LAYER_NUM_TOTAL = re.compile(r"^;\s*layer num/total_layer_count:\s*(\d+)\s*/\
 RE_LAYER_NUM = re.compile(r"^;\s*(?:layer num|current_layer|layer)\s*[:=]\s*(\d+)\s*$", re.I)
 RE_LAYER_CHANGE = re.compile(r"^;\s*LAYER_CHANGE", re.I)
 RE_SECTION = re.compile(r"^;=+")
-RE_M620 = re.compile(r"^M620 S(\d+)A\s*(?:;.*)?$")
-RE_M621 = re.compile(r"^M621 S(\d+)A\s*(?:;.*)?$")
-RE_T_COMMAND = re.compile(r"^T(\d+)\s*(?:;.*)?$")
-RE_M620_11_UNLOAD = re.compile(r"^M620\.11 S1 I(\d+) E-\d")
-RE_M620_11_FEED = re.compile(r"^M620\.11 S1 I(\d+) E\d")
-RE_M629 = re.compile(r"^M629 S1\s*(?:;.*)?$")
-RE_DISABLED = re.compile(r"^M620\.11 S0(?:\s*;.*)?$")
+RE_M620 = re.compile(r"^\s*M620 S(\d+)A\s*(?:;.*)?$")
+RE_M621 = re.compile(r"^\s*M621 S(\d+)A\s*(?:;.*)?$")
+RE_T_COMMAND = re.compile(r"^\s*T(\d+)\s*(?:;.*)?$")
+RE_M620_11_UNLOAD = re.compile(r"^\s*M620\.11 S1 I(\d+) E-\d")
+RE_M620_11_FEED = re.compile(r"^\s*M620\.11 S1 I(\d+) E\d")
+RE_M629 = re.compile(r"^\s*M629 S1\s*(?:;.*)?$")
+RE_DISABLED = re.compile(r"^\s*M620\.11 S0(?:\s*;.*)?$")
 RE_G1_Z = re.compile(r"^G1 Z([\d.]+) F(\d+)")
 RE_M104 = re.compile(r"^M104 S(\d+)")
 
 # The re-feed group that follows an unload line (Bambu/Orca shape).
 REFED_TAIL = [
-    re.compile(r"^M620\.11 S1 I\d+ E\d"),
-    re.compile(r"^M628 S1\s*(?:;.*)?$"),
-    re.compile(r"^G92 E0\s*(?:;.*)?$"),
-    re.compile(r"^G1 E[\d.]+"),
-    re.compile(r"^M400\s*(?:;.*)?$"),
-    re.compile(r"^M629 S1\s*(?:;.*)?$"),
+    re.compile(r"^\s*M620\.11 S1 I\d+ E\d"),
+    re.compile(r"^\s*M628 S1\s*(?:;.*)?$"),
+    re.compile(r"^\s*G92 E0\s*(?:;.*)?$"),
+    re.compile(r"^\s*G1 E[\d.]+"),
+    re.compile(r"^\s*M400\s*(?:;.*)?$"),
+    re.compile(r"^\s*M629 S1\s*(?:;.*)?$"),
 ]
 
-TOOL_WINDOW = 60  # how far a block may extend from its M620 line
+# A real Bambu tool-change block runs from M620 to M621 across the whole flush
+# and wipe section (hundreds of lines). The pieces we edit are always near the
+# start, so a bounded window — also clamped to the next block — is enough and
+# keeps parsing linear.
+BLOCK_WINDOW = 400
+HEADER_LOOKBACK = 20
 
 
 @dataclass
@@ -109,23 +114,31 @@ def parse_gcode(text: str) -> GcodeFile:
     # --- layer markers and tool changes ----------------------------------
     layer = 1
     total_layers = None
+    saw_explicit = False
     markers: list[LayerMarker] = []
     for i, raw in enumerate(lines):
-        line = _strip(raw)
+        if not raw.startswith(";"):
+            continue
+        line = raw.strip()
         m = RE_LAYER_NUM_TOTAL.match(line)
         if m:
             layer = int(m.group(1))
             total_layers = int(m.group(2))
+            saw_explicit = True
             markers.append(LayerMarker(line=i, layer=layer, total=total_layers))
             continue
         m = RE_LAYER_NUM.match(line)
         if m:
             layer = int(m.group(1))
+            saw_explicit = True
             markers.append(LayerMarker(line=i, layer=layer, total=None))
             continue
         if RE_LAYER_CHANGE.match(line):
-            layer += 1
-            markers.append(LayerMarker(line=i, layer=layer, total=None))
+            # ignore stray layer-change markers in the start gcode (before the
+            # first explicit layer number)
+            if saw_explicit:
+                layer += 1
+                markers.append(LayerMarker(line=i, layer=layer, total=None))
     gf.layers = markers
     gf.header["total_layer_count"] = str(total_layers) if total_layers else ""
 
@@ -138,73 +151,79 @@ def parse_gcode(text: str) -> GcodeFile:
         layer_at[i] = current
 
     # --- tool-change blocks ----------------------------------------------
+    # A real Bambu block runs from `M620 S<n>A` through the flush/wipe section to
+    # `M621 S<n>A`, which can be hundreds of lines later. We locate the block by
+    # its M620 line, take the first T command for the tool, and pick up the
+    # unload / re-feed pieces near the start. Blocks whose filament has no
+    # "long retractions when cut" carry `M620.11 S0` instead and are recorded as
+    # already disabled.
     blocks: list[ToolChange] = []
     ordinal = 0
     i = 0
     n = len(lines)
     while i < n:
-        m = RE_M620.match(_strip(lines[i]))
-        if not m:
+        if not RE_M620.match(lines[i]):
             i += 1
             continue
-        window_end = min(n, i + TOOL_WINDOW)
-        # find the T<n> and M621
+        window_end = min(n, i + BLOCK_WINDOW)
+        for j in range(i + 1, window_end):
+            if RE_M620.match(lines[j]):
+                window_end = j
+                break
+
         tool = None
+        tool_line = None
         m621 = None
         for j in range(i + 1, window_end):
-            st = _strip(lines[j])
-            tm = RE_T_COMMAND.match(st)
-            if tm and tool is None:
-                tool = int(tm.group(1))
+            st = lines[j]
+            if tool is None and RE_T_COMMAND.match(st):
+                tool = int(RE_T_COMMAND.match(st).group(1))
+                tool_line = j
             if RE_M621.match(st):
                 m621 = j
                 break
-        if tool is None or m621 is None:
+        if tool is None:
             i += 1
             continue
-        # header line: nearest preceding section marker
+
         header = i
-        for j in range(i, max(-1, i - TOOL_WINDOW), -1):
+        for j in range(i, max(-1, i - HEADER_LOOKBACK), -1):
             if RE_SECTION.match(lines[j]):
                 header = j
                 break
-        # unload + re-feed group
+
         unload = None
         refeed_start = refeed_end = None
         disabled: list[int] = []
-        end = m621
-        for j in range(m621 + 1, window_end):
-            st = _strip(lines[j])
+        end = m621 if m621 is not None else i
+        for j in range(i + 1, window_end):
+            st = lines[j]
             if RE_DISABLED.match(st):
                 disabled.append(j)
-                end = j
+                end = max(end, j)
                 continue
             if unload is None and RE_M620_11_UNLOAD.match(st):
                 unload = j
+                end = max(end, j)
                 continue
             if unload is not None and refeed_start is None and RE_M620_11_FEED.match(st):
-                # match the tail pattern group strictly
                 k = j
                 ok = True
                 for pat in REFED_TAIL:
-                    if k >= n or not pat.match(_strip(lines[k])):
+                    if k >= window_end or not pat.match(lines[k]):
                         ok = False
                         break
                     k += 1
                 if ok:
                     refeed_start = j
                     refeed_end = k - 1
-                    end = k - 1
-                    break
-            if RE_M620.match(st) and j != i:
+                    end = max(end, k - 1)
                 break
-        if disabled:
-            # a post-pause block: the disabled markers replace the unload/re-feed
-            unload = disabled[0]
+        if disabled and unload is None:
+            # already in the disabled form (no long retraction when cut)
             refeed_start = disabled[-1] if len(disabled) > 1 else None
             refeed_end = disabled[-1] if len(disabled) > 1 else None
-            end = disabled[-1]
-        # z / temp
+
         z_line = m104_line = None
         for j in range(header, end + 1):
             st = _strip(lines[j])
@@ -213,9 +232,9 @@ def parse_gcode(text: str) -> GcodeFile:
             if m104_line is None and RE_M104.match(st):
                 m104_line = j
 
-        # Skip the end-of-print unload pseudo change (T255 etc.).
+        # Skip pseudo tools: T255 (end-of-print unload) and T1000 (no tool).
         if tool >= 100:
-            i = end + 1
+            i = max(end, i) + 1
             continue
 
         blocks.append(
@@ -227,6 +246,7 @@ def parse_gcode(text: str) -> GcodeFile:
                 tool=tool,
                 layer=layer_at.get(i, 1),
                 demand_index=0,
+                tool_line=tool_line,
                 unload_line=unload,
                 refeed_start=refeed_start,
                 refeed_end=refeed_end,
@@ -235,7 +255,7 @@ def parse_gcode(text: str) -> GcodeFile:
             )
         )
         ordinal += 1
-        i = end + 1
+        i = max(end, i) + 1
 
     # assign demand indices (collapse consecutive same-tool blocks)
     demand = -1

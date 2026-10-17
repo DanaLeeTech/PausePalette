@@ -61,6 +61,7 @@ def plan_slots(
     lums: dict[int, float],
     names: dict[int, str],
     slots: int,
+    initial: set[int] | None = None,
 ) -> Plan:
     if slots < 1:
         raise ValueError("slots must be >= 1")
@@ -84,7 +85,19 @@ def plan_slots(
         if t not in distinct:
             distinct.append(t)
 
-    initial_set = frozenset(distinct[:slots])
+    if initial is not None:
+        initial_set = frozenset(initial)
+        if demands[0] not in initial_set:
+            # the very first colour must be resident at print start, otherwise no
+            # pause could ever load it
+            keep = sorted(initial_set)[: max(0, slots - 1)]
+            initial_set = frozenset(keep + [demands[0]])
+            plan.warnings.append(
+                f"initial load did not contain the first printed colour "
+                f"(T{demands[0]}); it was added"
+            )
+    else:
+        initial_set = frozenset(distinct[:slots])
 
     if len(distinct) <= slots:
         plan.initial = _assign_positions(initial_set, slots, lums, {})
@@ -285,7 +298,7 @@ def _lums_and_names(gf: GcodeFile) -> tuple[dict[int, float], dict[int, str]]:
     return lums, names
 
 
-def plan_for_gcode(gf: GcodeFile, slots: int) -> Plan:
+def plan_for_gcode(gf: GcodeFile, slots: int, initial: set[int] | None = None) -> Plan:
     lums, names = _lums_and_names(gf)
     return plan_slots(
         block_tools=[b.tool for b in gf.tool_changes],
@@ -293,4 +306,5 @@ def plan_for_gcode(gf: GcodeFile, slots: int) -> Plan:
         lums=lums,
         names=names,
         slots=slots,
+        initial=initial,
     )

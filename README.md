@@ -10,13 +10,19 @@ It is fully offline: **no AI, no API keys, no network, no slicer.** All of it is
 deterministic parsing and scheduling.
 
 ```
-STAGE 1  upload a .3mf project
+STAGE 1  upload a .3mf project (sliced or not)
          -> colour plan + a reordered .3mf to download
 STAGE 2  in Bambu Studio: open the reordered project, slice, export the plate
          sliced file
 STAGE 3  upload that slice back into the same job
          -> verified G-code with the pause blocks inserted + swap checklist
 ```
+
+Stage 1 works from the project's sliced plate when there is one. If the project
+is not sliced, PausePalette still accepts it: it reorders the filament list from
+whatever sequence data Bambu Studio stored with the project, and computes the
+pause schedule from the actual slice at stage 3. Multi-plate projects are
+supported — pick the plate you are printing (default plate 1).
 
 A single-stage shortcut (`convert`) does both stages at once for a file that is
 already sliced and already in its final filament order.
@@ -123,10 +129,17 @@ the pause table before you start.
 
 - **Dialect:** Bambu Studio / OrcaSlicer with AMS (the `T<n>` / `M620` /
   `M620.11` tool-change blocks). Other slicers are future dialect profiles; the
-  planner core is slicer-agnostic.
-- **Stage 1 needs a sliced project** — the plan needs the exact tool-change
-  sequence, which only the slice contains. Slice once in Bambu Studio (the slice
-  is saved with the project) and upload that.
+  planner core is slicer-agnostic. Real Bambu blocks are parsed as they are
+  written: the `M621` that closes a block can sit hundreds of lines below the
+  `M620` (after the flush and wipe sections), `T` lines may be indented, and
+  filaments with no "long retraction when cut" already carry `M620.11 S0` —
+  those blocks are left alone rather than edited.
+- **Stage 1 and slicing:** with a sliced project the plan is exact. Without a
+  slice it uses Bambu's stored filament sequence (provisional plan) or just
+  reorders and defers the plan to stage 3. Stage 3 always verifies the printer,
+  the filament ordering and — when known — the colour sequence before writing.
+- **Plates:** a project may hold several plates; the plan is made for one plate
+  and stage 3 picks the matching plate out of an uploaded `.3mf`.
 - PausePalette never slices and never talks to the printer, so it works with any
   machine that runs the G-code its slicer produced.
 
@@ -135,6 +148,8 @@ the pause table before you start.
 ```sh
 pip install -e ".[web,dev]"
 pytest -q
+# regression tests against a real Bambu project (skipped if not present):
+PAUSEPALETTE_REAL_3MF="/path/to/keyrings.gcode.3mf" pytest -q tests/test_real_bambu.py
 python tools/make_sample.py   # writes samples/Keychain.3mf and .gcode
 ```
 

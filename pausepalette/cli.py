@@ -52,7 +52,7 @@ def cmd_analyze(args: argparse.Namespace) -> int:
 
 def cmd_plan(args: argparse.Namespace) -> int:
     src = Path(args.input)
-    result = plan_from_project(src.read_bytes(), slots=args.slots)
+    result = plan_from_project(src.read_bytes(), slots=args.slots, plate=args.plate)
     out_proj = Path(args.output) if args.output else _out_path(src, "_pausepalette")
     out_proj.write_bytes(result.reordered_project)
     plan_path = Path(args.plan) if args.plan else _out_path(out_proj, ".plan").with_suffix(".plan.json")
@@ -94,7 +94,7 @@ def cmd_apply(args: argparse.Namespace) -> int:
 
 def cmd_convert(args: argparse.Namespace) -> int:
     src = Path(args.input)
-    result = plan_and_insert(src.read_bytes(), slots=args.slots)
+    result = plan_and_insert(src.read_bytes(), slots=args.slots, plate=args.plate)
     out = Path(args.output) if args.output else _out_path(src, "_pauses")
     out.write_bytes(result.edited.text.encode("utf-8"))
     checklist = out.with_suffix(".checklist.md")
@@ -125,6 +125,7 @@ def build_parser() -> argparse.ArgumentParser:
     pl.add_argument("-o", "--output", help="reordered project path")
     pl.add_argument("--plan", help="plan json path")
     pl.add_argument("--slots", type=int, default=4)
+    pl.add_argument("--plate", type=int, default=1, help="plate number to plan (default 1)")
     pl.set_defaults(func=cmd_plan)
 
     ap = sub.add_parser("apply", help="stage 3: insert pauses from a plan into a sliced file")
@@ -137,6 +138,7 @@ def build_parser() -> argparse.ArgumentParser:
     cv.add_argument("input")
     cv.add_argument("-o", "--output")
     cv.add_argument("--slots", type=int, default=4)
+    cv.add_argument("--plate", type=int, default=None, help="plate number inside a 3mf")
     cv.set_defaults(func=cmd_convert)
     return p
 

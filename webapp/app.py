@@ -77,7 +77,7 @@ def index(request: Request, error: str | None = None):
     return templates.TemplateResponse(
         request,
         "index.html",
-        {"jobs": store.list()[:12], "error": error, "slots": 4},
+        {"jobs": store.list()[:12], "error": error, "slots": 4, "plate": 1},
     )
 
 
@@ -86,15 +86,16 @@ async def plan(
     request: Request,
     project: UploadFile = File(...),
     slots: int = Form(4),
+    plate: int = Form(1),
 ):
     try:
         data = await _read_upload(project)
-        stage1 = plan_from_project(data, slots=slots)
+        stage1 = plan_from_project(data, slots=slots, plate=plate)
     except StopAndExplain as exc:
         return templates.TemplateResponse(
             request,
             "index.html",
-            {"jobs": store.list()[:12], "error": str(exc), "slots": slots},
+            {"jobs": store.list()[:12], "error": str(exc), "slots": slots, "plate": plate},
             status_code=400,
         )
 
@@ -109,6 +110,8 @@ async def plan(
         stage="planned",
         original_name=_safe_name(project.filename or "project.3mf"),
         slots=slots,
+        plate=stage1.plate,
+        plates=stage1.plates,
         printer_model=stage1.printer_model,
         filaments=stage1.original_filaments,
         filament_names=stage1.original_names,
@@ -116,6 +119,8 @@ async def plan(
         pauses=len(stage1.plan.pauses),
         swaps=stage1.plan.swaps_total,
         moves=stage1.plan.colour_moves,
+        provisional=stage1.plan.provisional,
+        deferred=stage1.plan.deferred,
         notes=stage1.notes,
         reorder_report={
             "json_keys_permuted": stage1.reorder_report.json_keys_permuted,
@@ -128,10 +133,15 @@ async def plan(
 
 
 @app.post("/convert")
-async def convert(request: Request, slice_file: UploadFile = File(...), slots: int = Form(4)):
+async def convert(
+    request: Request,
+    slice_file: UploadFile = File(...),
+    slots: int = Form(4),
+    plate: int | None = Form(None),
+):
     try:
         data = await _read_upload(slice_file)
-        result = plan_and_insert(data, slots=slots)
+        result = plan_and_insert(data, slots=slots, plate=plate)
     except StopAndExplain as exc:
         return templates.TemplateResponse(
             request,
@@ -148,6 +158,7 @@ async def convert(request: Request, slice_file: UploadFile = File(...), slots: i
         "stage": "converted",
         "original_name": _safe_name(slice_file.filename or "slice.gcode"),
         "slots": slots,
+        "plate": result.plan.plate if result.plan else None,
         "printer_model": result.plan.printer_model,
         "pauses": result.edited.inserted_blocks,
         "swaps": result.plan.swaps_total,

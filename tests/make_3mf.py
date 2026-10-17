@@ -55,7 +55,7 @@ def project_settings() -> dict:
     }
 
 
-def model_settings() -> str:
+def model_settings(with_sequences: bool = True) -> str:
     parts = []
     for i in range(len(FILAMENTS)):
         parts.append(
@@ -65,15 +65,32 @@ def model_settings() -> str:
       <metadata key="extruder" value="{i + 1}"/>
     </part>"""
         )
+    plate = ""
+    if with_sequences:
+        plate = (
+            """  <plate>
+    <metadata key="plater_id" value="1"/>
+    <metadata key="plater_name" value="Keychain"/>
+    <metadata key="gcode_file" value="Metadata/plate_1.gcode"/>
+    <metadata key="first_layer_print_sequence" value="1 6 3 2 8 7 4 5 9"/>
+  </plate>
+"""
+        )
     return (
-        '<?xml version="1.0" encoding="UTF-8"?>\n<config>\n  <object id="2">\n'
+        '<?xml version="1.0" encoding="UTF-8"?>\n<config>\n'
+        + plate
+        + '  <object id="2">\n'
         '    <metadata key="name" value="Keychain"/>\n'
         + "\n".join(parts)
         + "\n  </object>\n</config>\n"
     )
 
 
-def build_3mf(gcode: str | None = None, sliced: bool = True) -> bytes:
+def build_3mf(
+    gcode: str | None = None,
+    sliced: bool = True,
+    sequence_json: bool = False,
+) -> bytes:
     gcode = gcode if gcode is not None else keychain_gcode()
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
@@ -86,4 +103,9 @@ def build_3mf(gcode: str | None = None, sliced: bool = True) -> bytes:
         z.writestr("Metadata/slice_info.config", "<config/>")
         if sliced:
             z.writestr("Metadata/plate_1.gcode", gcode)
+        if sequence_json:
+            z.writestr(
+                "Metadata/filament_sequence.json",
+                json.dumps({"plate_1": {"sequence": [1, 6, 3, 2, 8, 7, 4, 5, 9]}}),
+            )
     return buf.getvalue()

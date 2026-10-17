@@ -10,15 +10,21 @@
 <div class="grid">
   <section class="card">
     <h2><span class="step">1</span> Plan from a project</h2>
-    <p class="muted">Upload the sliced <code>.3mf</code> project. You get a colour plan and a
-       reordered project that already has the filament list in the right order.</p>
+    <p class="muted">Upload a <code>.3mf</code> project — sliced or not. You get a colour plan,
+       and a reordered project that already has the filament list in the right order.
+       On multi-plate projects pick the plate you are printing.</p>
     <form action="/plan" method="post" enctype="multipart/form-data">
       <label>Project file (.3mf)
         <input type="file" name="project" accept=".3mf,application/zip" required>
       </label>
-      <label>AMS slots
-        <input type="number" name="slots" value="{{ slots }}" min="1" max="16">
-      </label>
+      <div class="row">
+        <label>AMS slots
+          <input type="number" name="slots" value="{{ slots }}" min="1" max="16">
+        </label>
+        <label>Plate
+          <input type="number" name="plate" value="{{ plate }}" min="1" max="16">
+        </label>
+      </div>
       <button type="submit">Plan &amp; reorder</button>
     </form>
   </section>

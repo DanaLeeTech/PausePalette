@@ -14,15 +14,16 @@ import re
 from ..errors import StopAndExplain
 from ..model import Pause, ToolChange
 
-RE_UNLOAD = re.compile(r"^M620\.11 S1 I\d+ E-\d")
-RE_FEED = re.compile(r"^M620\.11 S1 I\d+ E\d")
+RE_UNLOAD = re.compile(r"^\s*M620\.11 S1 I\d+ E-\d")
+RE_FEED = re.compile(r"^\s*M620\.11 S1 I\d+ E\d")
+RE_ALREADY_DISABLED = re.compile(r"^\s*M620\.11 S0\b")
 RE_REFED_TAIL = [
     RE_FEED,
-    re.compile(r"^M628 S1(?:\s*;.*)?$"),
-    re.compile(r"^G92 E0(?:\s*;.*)?$"),
-    re.compile(r"^G1 E[\d.]+"),
-    re.compile(r"^M400(?:\s*;.*)?$"),
-    re.compile(r"^M629 S1(?:\s*;.*)?$"),
+    re.compile(r"^\s*M628 S1(?:\s*;.*)?$"),
+    re.compile(r"^\s*G92 E0(?:\s*;.*)?$"),
+    re.compile(r"^\s*G1 E[\d.]+"),
+    re.compile(r"^\s*M400(?:\s*;.*)?$"),
+    re.compile(r"^\s*M629 S1(?:\s*;.*)?$"),
 ]
 
 DISABLED_LINE = "M620.11 S0 ; filament already unloaded at pause"
@@ -76,12 +77,14 @@ def transform_following_block(
     """Apply the step-D edits to the block that follows a pause.
 
     Returns (new_lines, lines_removed, lines_changed). Raises StopAndExplain if
-    the expected unload / re-feed structure is not exactly present.
+    the block has neither the unload / re-feed structure nor the slicer's own
+    "already disabled" form.
     """
     stripped = [ln.strip() for ln in lines]
     out = list(lines)
     removed = 0
     changed = 0
+    already = any(RE_ALREADY_DISABLED.match(st) for st in stripped)
 
     # 1. the unload line -> disabled
     unload_idx = None
@@ -89,26 +92,37 @@ def transform_following_block(
         if RE_UNLOAD.match(st):
             unload_idx = i
             break
-    if unload_idx is None:
+    if unload_idx is not None:
+        indent = _indent(out[unload_idx])
+        out[unload_idx] = indent + DISABLED_LINE + newline
+        changed += 1
+        search_from = unload_idx + 1
+    elif already:
+        # this filament has no long retraction when cut, so the slicer already
+        # wrote `M620.11 S0` here
+        search_from = 0
+    else:
         raise StopAndExplain(
             f"T{block.tool} block: expected an unload line "
-            f"'M620.11 S1 I<n> E-<dist> F...' but none was found"
+            f"'M620.11 S1 I<n> E-<dist> F...' or a disabled 'M620.11 S0' "
+            f"but neither was found"
         )
-    indent = _indent(out[unload_idx])
-    out[unload_idx] = indent + DISABLED_LINE + newline
-    changed += 1
 
     # 2. the re-feed group -> one disabled line
     feed_idx = None
-    for i in range(unload_idx + 1, len(stripped)):
+    for i in range(search_from, len(stripped)):
         if RE_FEED.match(stripped[i]):
             feed_idx = i
             break
-    if feed_idx is None or feed_idx + len(RE_REFED_TAIL) > len(stripped):
+    if feed_idx is None:
+        if already:
+            return out, removed, changed
         raise StopAndExplain(
             f"T{block.tool} block: expected the 6-line re-feed group after the "
             f"unload line but it was not found"
         )
+    if feed_idx + len(RE_REFED_TAIL) > len(stripped):
+        raise StopAndExplain(f"T{block.tool} block: truncated re-feed group")
     for j, pat in enumerate(RE_REFED_TAIL):
         if not pat.match(stripped[feed_idx + j]):
             raise StopAndExplain(
@@ -117,5 +131,6 @@ def transform_following_block(
             )
     end = feed_idx + len(RE_REFED_TAIL)
     removed += end - feed_idx - 1  # net line removal (one line replaces the group)
+    indent = _indent(out[feed_idx])
     out[feed_idx:end] = [indent + DISABLED_LINE + newline]
     return out, removed, changed

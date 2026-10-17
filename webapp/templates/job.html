@@ -8,10 +8,17 @@
     <div><span class="k">Stage</span><span class="v">{{ job.stage }}</span></div>
     <div><span class="k">Printer</span><span class="v">{{ job.printer_model or '—' }}</span></div>
     <div><span class="k">Slots</span><span class="v">{{ job.slots }}</span></div>
+    <div><span class="k">Plate</span><span class="v">{{ job.plate or '—' }}</span></div>
     <div><span class="k">Pauses</span><span class="v">{{ job.pauses if job.pauses is defined else '—' }}</span></div>
     <div><span class="k">Swaps</span><span class="v">{{ job.swaps if job.swaps is defined else '—' }}</span></div>
     <div><span class="k">Position moves</span><span class="v">{{ job.moves if job.moves is defined else '—' }}</span></div>
+    <div><span class="k">Plan</span><span class="v">{% if job.deferred %}deferred{% elif job.provisional %}provisional{% else %}exact{% endif %}</span></div>
   </div>
+  {% if job.plates and job.plates | length > 1 %}
+  <p class="muted">Plates in this project:
+    {% for p in job.plates %}{{ p.id }}{% if p.name %} ({{ p.name }}){% endif %}{% if p.has_slice %} sliced{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}.
+  </p>
+  {% endif %}
 </section>
 
 {% if job.stage == 'planned' %}
@@ -55,9 +62,20 @@
 {% if plan %}
 <section class="card">
   <h2>Colour plan</h2>
+  {% if plan.deferred %}
+  <div class="banner">
+    <strong>This project was not sliced</strong>, so the pause points are not known yet.
+    The filament order above is what to use; the exact pause schedule is computed
+    automatically when you upload the slice in the next step.
+  </div>
+  {% else %}
   <p><strong>Initial AMS load:</strong>
     {% for tool in plan.initial %}{% if tool is not none %}Pos{{ loop.index }} {{ plan.tool_name(tool) }}{% if not loop.last %}, {% endif %}{% endif %}{% endfor %}
   </p>
+  {% if plan.provisional %}
+  <p class="muted">Provisional: taken from the sequence Bambu Studio stored in the
+     project. The exact pause positions are resolved from your slice in step 3.</p>
+  {% endif %}
   {% if plan.pauses %}
   <table>
     <thead><tr><th>#</th><th>Pause before</th><th>Layer</th><th>Swaps</th></tr></thead>
@@ -66,7 +84,7 @@
       <tr>
         <td>{{ p.index }}</td>
         <td>T{{ p.tool }} {{ plan.tool_name(p.tool) }}</td>
-        <td>{{ p.layer }}</td>
+        <td>{% if p.layer %}{{ p.layer }}{% else %}—{% endif %}</td>
         <td>{% for s in p.swaps %}<div>{{ s.describe() }}</div>{% endfor %}</td>
       </tr>
     {% endfor %}
@@ -74,6 +92,7 @@
   </table>
   {% else %}
   <p class="ok">All colours fit in the AMS — no pauses are needed.</p>
+  {% endif %}
   {% endif %}
   {% if plan.warnings %}<ul class="muted">{% for w in plan.warnings %}<li>{{ w }}</li>{% endfor %}</ul>{% endif %}
 </section>
