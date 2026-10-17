@@ -97,7 +97,15 @@ def cmd_convert(args: argparse.Namespace) -> int:
     result = plan_and_insert(src.read_bytes(), slots=args.slots)
     out = Path(args.output) if args.output else _out_path(src, "_pauses")
     out.write_bytes(result.edited.text.encode("utf-8"))
-    print(f"output: {out}")
+    checklist = out.with_suffix(".checklist.md")
+    checklist.write_text(
+        report.checklist_markdown(
+            result.plan, src.name, result.plan.printer_model if result.plan else None
+        ),
+        encoding="utf-8",
+    )
+    print(f"output:    {out}")
+    print(f"checklist: {checklist}")
     print(f"inserted {result.edited.inserted_blocks} pause blocks")
     for name, ok, detail in result.report.checks:
         print(f"  [{'ok' if ok else 'FAIL'}] {name}" + (f" — {detail}" if detail else ""))
