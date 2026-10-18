@@ -17,6 +17,18 @@ PausePalette works all of that out for you. Give it your print file and it:
 
 Try it at **<https://pausepalette.dlee.app>**, or run your own copy — everything below is for that.
 
+## How it works (the short version)
+
+The planner searches for the colour order that needs the fewest pauses, then the
+fewest spool swaps, then the fewest colour moves, and finally swaps darker colours
+in earlier. Some things it will never do:
+
+- A colour never changes slot mid-print — each spool has one home for the whole
+  print.
+- Spools you never swap out are loaded first.
+- Each pause is placed at the earliest safe tool-change moment, and one pause can
+  cover every slot that needs changing.
+
 ## Before you start
 
 - A print file from **Bambu Studio** or **OrcaSlicer** — a `.3mf` project, or a
@@ -92,6 +104,13 @@ after an update) and a **Delete** button.
 - Multi-plate projects are supported; pick the plate you're printing (plate 1 by
   default).
 
+And PausePalette won't write anything it isn't sure about: before stage 3 it checks
+the slice matches the plan (printer model, filament order, tool changes and
+layers), then verifies the edited file is byte-for-byte identical to the original
+apart from the recorded insertions, with one pause per place it should be. If a
+project's internal layout isn't recognised, it stops and explains rather than
+guessing.
+
 ## Without Docker
 
 ```sh
@@ -118,25 +137,13 @@ pausepalette convert Keychain.gcode --slots 4
 pausepalette analyze Keychain.3mf
 ```
 
-With Docker, prefix each command with `docker compose run --rm pausepalette`.
+With Docker, prefix each command with `docker compose run --rm pausepalette`, or
+save this alias in `~/.bashrc` to run them as written from any folder (change the
+path if you cloned PausePalette elsewhere):
 
-## How it works (the short version)
-
-The planner searches for the colour order that needs the fewest pauses, then the
-fewest spool swaps, then the fewest colour moves, and finally swaps darker colours
-in earlier. Some things it will never do:
-
-- A colour never changes slot mid-print — each spool has one home for the whole
-  print.
-- Spools you never swap out are loaded first.
-- Each pause is placed at the earliest safe tool-change moment, and one pause can
-  cover every slot that needs changing.
-
-Before writing anything at stage 3, PausePalette checks the slice matches the plan
-(printer model, filament order, tool changes and layers), then verifies the edited
-file is byte-for-byte identical to the original apart from the recorded
-insertions, with one pause per place it should be. If a project's internal layout
-isn't recognised, it stops and explains rather than guessing.
+```sh
+alias pausepalette='docker compose -f ~/PausePalette/compose.yaml run --rm -v "$PWD:/work" -w /work pausepalette'
+```
 
 ## For developers
 
