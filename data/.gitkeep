@@ -1,0 +1,2 @@
+# Keeps the ./data folder in the repo so a fresh clone has it, owned by you,
+# before Docker creates it (as root) for the bind mount.
