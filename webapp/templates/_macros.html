@@ -1,0 +1,167 @@
+{# ---------------------------------------------------------------------------
+   Shared visual building blocks for the plan display.
+
+   Every place a colour is named also shows its actual colour chip, drawn from
+   the hex stored in plan.filament_colour (new T numbering).  Names stay as
+   text next to the chips, so the chips are decorative (aria-hidden) and the
+   page is readable without them.
+--------------------------------------------------------------------------- #}
+
+{% macro chip(plan, tool, cls='') -%}
+{%- set colours = plan.filament_colour -%}
+{%- set raw = colours[tool] if tool is not none and tool >= 0 and tool < (colours | length) else '' -%}
+{%- if tool is none -%}
+<span class="chip chip-empty {{ cls }}" title="empty position" aria-hidden="true"></span>
+{%- elif raw -%}
+{%- set hex = raw if raw[:1] == '#' else '#' ~ raw -%}
+<span class="chip {{ cls }}" style="background: {{ hex }}" title="{{ plan.tool_name(tool) }}" aria-hidden="true"></span>
+{%- else -%}
+<span class="chip chip-unknown {{ cls }}" title="{{ plan.tool_name(tool) }}" aria-hidden="true"></span>
+{%- endif -%}
+{%- endmacro %}
+
+
+{# a chip plus the colour's name #}
+{% macro colour(plan, tool) -%}
+<span class="cn">{{ chip(plan, tool) }}<span class="cn-name">{{ plan.tool_name(tool) }}</span></span>
+{%- endmacro %}
+
+
+{# one AMS position box #}
+{% macro slot(plan, pos, tool) -%}
+<div class="slot{% if tool is none %} slot-empty{% endif %}">
+  <span class="slot-pos">Pos {{ pos }}</span>
+  {{ chip(plan, tool, 'lg') }}
+  <span class="slot-name">{{ plan.tool_name(tool) }}</span>
+  <span class="slot-tool">{% if tool is not none %}T{{ tool }}{% else %}empty{% endif %}</span>
+</div>
+{%- endmacro %}
+
+
+{# the row of AMS position boxes (the initial load) #}
+{% macro slots_row(plan, positions, count=None) -%}
+{%- set n = count if count else (positions | length) -%}
+<div class="slots">
+  {%- for pos in range(1, n + 1) %}
+  {%- set tool = positions[pos - 1] if pos - 1 < (positions | length) else none %}
+  {{ slot(plan, pos, tool) }}
+  {%- endfor %}
+</div>
+{%- endmacro %}
+
+
+{# positions across the top, one row per pause: the print order runs down #}
+{% macro timeline(plan) -%}
+{%- if (plan.timeline | length) > 1 %}
+<div class="tl-scroll">
+  <table class="tl">
+    <thead>
+      <tr>
+        <th class="tl-corner">Pause</th>
+        {%- for pos in range(1, plan.slots + 1) %}
+        <th class="tl-pos">Pos {{ pos }}</th>
+        {%- endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {%- for step in plan.timeline %}
+      <tr>
+        {%- if loop.first %}
+        <th class="tl-step tl-start"><span class="tl-label">Start</span><span class="tl-layer">load the AMS</span></th>
+        {%- elif loop.index0 - 1 < (plan.pauses | length) %}
+        {%- set p = plan.pauses[loop.index0 - 1] %}
+        {%- set before = plan.tool_before(p) %}
+        <th class="tl-step">
+          <span class="tl-label">Pause {{ p.index }}</span>
+          <span class="tl-layer">layer {{ p.layer }}</span>
+          <span class="tl-colours">
+            {%- if before is not none %}<span class="tl-was"><span class="end-label">last printed</span>{{ colour(plan, before) }}</span>{% endif %}
+            <span class="tl-after"><span class="end-label">after the swap</span>{{ colour(plan, plan.tool_after(p)) }}</span>
+          </span>
+        </th>
+        {%- endif %}
+        {%- for pos in range(1, plan.slots + 1) %}
+        {%- set tool = step.positions[pos - 1] if pos - 1 < (step.positions | length) else none %}
+        <td class="tl-cell">{{ chip(plan, tool) }}</td>
+        {%- endfor %}
+      </tr>
+      {%- endfor %}
+    </tbody>
+  </table>
+</div>
+{%- endif %}
+{%- endmacro %}
+
+
+{# one pause and the swaps it requires #}
+{% macro pause_card(plan, p, total, checklist=false) -%}
+{%- set before = plan.tool_before(p) %}
+<div class="pause-card">
+  <div class="pause-head">
+    {%- if checklist %}<input type="checkbox" class="pause-check" aria-label="Pause {{ p.index }} complete">{% endif %}
+    <span class="pause-no">Pause {{ p.index }}</span>
+    <span class="pause-of">of {{ total }}</span>
+    <span class="pause-meta">layer {{ p.layer }}</span>
+    {%- if p.remaining_text %}
+    <span class="pause-left" title="estimated printing time from this pause to the end of the print">- {{ p.remaining_text }}</span>
+    {%- endif %}
+    <span class="pause-colours">
+      {%- if before is not none %}<span class="pc-was"><span class="end-label">last printed</span>{{ colour(plan, before) }}</span>{% endif %}
+      <span class="pc-after"><span class="end-label">after the swap</span>{{ colour(plan, plan.tool_after(p)) }}</span>
+    </span>
+  </div>
+  <ul class="swaps">
+    {%- for s in p.swaps %}
+    <li class="swap">
+      <span class="sw-pos">Pos {{ s.position }}</span>
+      <span class="sw-out">{{ colour(plan, s.out_tool) }}</span>
+      <span class="sw-arrow" aria-hidden="true">&rarr;</span>
+      <span class="sw-in">{{ colour(plan, s.in_tool) }}</span>
+    </li>
+    {%- endfor %}
+  </ul>
+</div>
+{%- endmacro %}
+
+
+{# the filament list the slicer must be set to (T order) #}
+{% macro filament_order(plan) -%}
+<ol class="filament-list">
+  {%- for name in plan.filament_name %}
+  <li>
+    <span class="fl-no">{{ loop.index }}</span>
+    {{ chip(plan, loop.index0) }}
+    <span class="fl-name">{{ name }}</span>
+    <span class="fl-tool">T{{ loop.index0 }}</span>
+  </li>
+  {%- endfor %}
+</ol>
+{%- endmacro %}
+
+
+{# --- job actions: regenerate the plan, or remove the job --------------- #}
+
+{# Remix Icon (ri-refresh-line / ri-delete-bin-line), inlined so the chrome
+   never depends on a network: the glyphs cannot go blank offline. #}
+
+{% macro icon_refresh() -%}
+<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5.463 4.433A9.961 9.961 0 0 1 12 2c5.523 0 10 4.477 10 10 0 2.136-.67 4.116-1.81 5.74L17 12h3A8 8 0 0 0 6.46 6.228l-.997-1.795zm13.074 15.134A9.961 9.961 0 0 1 12 22C6.477 22 2 17.523 2 12c0-2.136.67-4.116 1.81-5.74L7 12H4a8 8 0 0 0 13.54 5.772l.997 1.795z"/></svg>
+{%- endmacro %}
+
+{% macro icon_delete() -%}
+<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M17 6h5v2h-2v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V8H2V6h5V3a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v3zm1 2H6v12h12V8zm-9 3h2v6H9v-6zm4 0h2v6h-2v-6zM9 4v2h6V4H9z"/></svg>
+{%- endmacro %}
+
+{% macro job_actions(j) -%}
+<span class="actions">
+  <form action="/job/{{ j.id }}/regenerate" method="post">
+    <button class="icon-btn" type="submit" title="Regenerate the plan from the stored file"
+            aria-label="Regenerate the plan from the stored file">{{ icon_refresh() }}</button>
+  </form>
+  <form action="/job/{{ j.id }}/delete" method="post"
+        onsubmit="return confirm('Delete this job and its files?');">
+    <button class="icon-btn danger" type="submit" title="Delete this job"
+            aria-label="Delete this job">{{ icon_delete() }}</button>
+  </form>
+</span>
+{%- endmacro %}

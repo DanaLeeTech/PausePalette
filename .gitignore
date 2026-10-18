@@ -1,7 +1,15 @@
 __pycache__/
 *.pyc
 .venv/
+.env
 data/
 samples/
 *.egg-info/
 .pytest_cache/
+
+# internal notes and deployment-only files (never published)
+AGENTS.md
+opencode_pause_prompt.md
+deploy/
+compose.override.yaml
+strix_runs/

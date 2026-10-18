@@ -6,10 +6,22 @@ services:
       - "8000:8000"
     environment:
       PAUSEPALETTE_DATA: /data/jobs
+      # The public address your instance is served at, if any. It is what the
+      # pages put in their canonical link and in link previews. Set it in
+      # ".env" (see example.env); blank means "reachable over localhost only".
+      PAUSEPALETTE_PUBLIC_URL: "${PAUSEPALETTE_PUBLIC_URL:-}"
+    # The job store is plain files in ./data, not a Docker volume. That means a
+    # rebuild, a re-clone, a project rename or `docker compose down -v` cannot
+    # clear it, and you can move or back it up with plain cp/tar. It is listed in
+    # .gitignore and .dockerignore. To migrate an old named volume:
+    #
+    #   docker run --rm -v pausepalette_pausepalette-data:/from:ro \
+    #     -v "$PWD/data:/to" alpine sh -c \
+    #     'cp -a /from/. /to/ && chown -R '"$(id -u)"':'"$(id -g)"' /to'
+    #
+    user: "${PAUSEPALETTE_UID:-1000}:${PAUSEPALETTE_GID:-1000}"
     volumes:
-      - pausepalette-data:/data
-      # To keep job files on the host instead, comment the line above and use:
-      # - ./data:/data
+      - ./data:/data
     healthcheck:
       test:
         - CMD
@@ -21,6 +33,3 @@ services:
       retries: 3
       start_period: 5s
     restart: unless-stopped
-
-volumes:
-  pausepalette-data:

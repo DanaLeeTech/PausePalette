@@ -1,149 +1,144 @@
 # PausePalette
 
-**More colours than your AMS has slots?** PausePalette works out the best colour
-plan for a Bambu/Orca print, tells your slicer what filament order to use,
-writes that reordered project for you, and then inserts manual spool-swap pauses
-into the sliced G-code — the validated `T255` cut-and-retract + `M400 U1`
-technique for Bambu AMS printers.
+**Print in more colours than your AMS has slots.**
 
-It is fully offline: **no AI, no API keys, no network, no slicer.** All of it is
-deterministic parsing and scheduling.
+Your AMS (the box that feeds filament to a Bambu printer) holds a handful of
+spools — usually four. If a model uses more colours than that, you normally have
+to pause the print and swap spools by hand, which is easy to get wrong. **No
+AMS?** It works with a single spool too — set one slot and swap by hand at each
+pause PausePalette tells you about.
 
-```
-STAGE 1  upload a .3mf project (sliced or not)
-         -> colour plan + a reordered .3mf to download
-STAGE 2  in Bambu Studio: open the reordered project, slice, export the plate
-         sliced file
-STAGE 3  upload that slice back into the same job
-         -> verified G-code with the pause blocks inserted + swap checklist
-```
+PausePalette works all of that out for you. Give it your print file and it:
 
-Stage 1 works from the project's sliced plate when there is one. If the project
-is not sliced, PausePalette still accepts it: it reorders the filament list from
-whatever sequence data Bambu Studio stored with the project, and computes the
-pause schedule from the actual slice at stage 3. Multi-plate projects are
-supported — pick the plate you are printing (default plate 1).
+1. **Plans** the best colour order — the fewest pauses and the fewest spool swaps.
+2. **Reorders** your project file to match, without changing your design at all.
+3. **Adds the pauses** into the sliced G-code, plus a checklist of which spool to
+   swap when.
 
-A single-stage shortcut (`convert`) does both stages at once for a file that is
-already sliced and already in its final filament order.
+Try it at **<https://pausepalette.dlee.app>**, or run your own copy — everything below is for that.
 
-## Quickstart (Docker)
+## Before you start
 
-```sh
-docker compose up --build
-# open http://localhost:8000
-```
+- A print file from **Bambu Studio** or **OrcaSlicer** — a `.3mf` project, or a
+  sliced `.gcode` file.
+- A printer with an **AMS** — or a plain single-spool printer, where you set one
+  slot and swap by hand at each pause. Bambu Lab printers are supported (see
+  **Limits** below).
+- **Docker** for the easy install, or **Python 3.10+** if you'd rather not use
+  Docker.
 
-The job store lives in a named volume (`pausepalette-data`). To keep job files on
-the host instead, swap the volume for `- ./data:/data` in `compose.yaml`.
-
-The same image runs the CLI:
+## Install and run (Docker — easiest)
 
 ```sh
-# stage 1: plan + reordered project
-docker compose run --rm pausepalette plan /work/Keychain.3mf --slots 4 \
-    -o /work/Keychain_pausepalette.3mf --plan /work/plan.json
-
-# stage 3: insert pauses into the slice the user exported
-docker compose run --rm pausepalette apply /work/Keychain.gcode \
-    --plan /work/plan.json -o /work/Keychain_pauses.gcode
-
-# single stage
-docker compose run --rm pausepalette convert /work/Keychain.gcode --slots 4
-
-# inspect a file
-docker compose run --rm pausepalette analyze /work/Keychain.3mf
+git clone https://github.com/DanaLeeTech/PausePalette.git PausePalette
+cd PausePalette
+docker compose up -d --build
 ```
+
+Then open **http://localhost:8000** in your browser. The `-d` runs it in the
+background — `docker compose logs -f` follows its logs, and `docker compose down`
+stops it.
+
+To reach your instance at a public address, copy `example.env` to `.env` and set
+`PAUSEPALETTE_PUBLIC_URL` to that address. It's what the pages use in link
+previews and their canonical link; leave it blank for localhost-only use.
+`example.env` also has `PAUSEPALETTE_UID` / `PAUSEPALETTE_GID`, so the files in
+`./data` end up owned by you.
+
+## How to use it
+
+**Stage 1 — Plan.** Upload your `.3mf` project. PausePalette shows the colour
+plan (each colour as a chip in its real colour) and gives you a new `.3mf` to
+download with the colours in the planned order.
+
+**Stage 2 — Slice.** Open that new project in Bambu Studio, slice it, and export
+the plate file as usual. PausePalette does not slice for you.
+
+**Stage 3 — Add the pauses.** Upload that sliced file back into the same job.
+PausePalette checks it matches the plan and gives you the finished file with the
+pauses built in, plus a swap checklist to follow at the printer.
+
+Then **print straight from that file — do not slice it again.**
+
+Everything is shown on screen before you print: your AMS slots, how they change
+over the print, one card per pause with the swaps it needs, and a tickable
+checklist. Every job also has a **Regenerate** button (re-runs your upload — handy
+after an update) and a **Delete** button.
+
+## Good to know
+
+- Jobs are kept for **five days**, then deleted.
+- Your job list follows your **IP address and browser**, so the same browser on a
+  different network sees your jobs, and so does another device on your home
+  network.
+- Jobs are stored as plain files in the `./data` folder next to PausePalette, so
+  you can back them up or move them with a simple copy.
+- If you put PausePalette online, add a password in front of it — people sharing
+  one internet connection share one job list.
+
+## Limits — please read
+
+- **Only the Bambu Lab A1 has actually been printed with these pauses.** Other
+  Bambu models (X1, P1, A1 mini, A2L, H2D, H2S, P2S, X2D) and non-Bambu printers
+  (via OrcaSlicer/Bambu Studio profiles) are supported, but nobody has test-printed
+  them yet — so check the pause moves before you start.
+- **Always print from the file PausePalette gives you, and never re-slice it.**
+  Re-slicing throws the pauses away. Every output says so on it.
+- PausePalette never slices and never talks to your printer, so it works with any
+  printer that prints the G-code its slicer produced.
+- If your file isn't one PausePalette recognises, it stops and explains why
+  instead of guessing. An unsliced project is still accepted — it plans from the
+  model's shape, or simply reorders and leaves the exact plan for stage 3.
+- Multi-plate projects are supported; pick the plate you're printing (plate 1 by
+  default).
 
 ## Without Docker
 
 ```sh
 python3 -m venv .venv && . .venv/bin/activate
 pip install ".[web]"
-pausepalette --help
 uvicorn webapp.app:app --port 8000
 ```
 
-## How the plan is made
+## Command line
 
-The planner is an exact search over the classical offline slot-scheduling
-problem (a state is the set of colours loaded in the AMS; a pause is a
-transition between sets; every demand between two pauses must be covered).
-Its objective is lexicographic:
+Prefer a terminal? The same tool has a command line.
 
-1. **fewest pauses**
-2. **fewest spool swaps**
-3. **sticky-home tiebreak** — fewest colour moves; a colour changes position
-   only when it buys a pause
-4. **dark-to-light bias** — darker colours swapped in earlier
+```sh
+# plan + write a reordered project
+pausepalette plan Keychain.3mf --slots 4 -o Keychain_pausepalette.3mf --plan plan.json
 
-And these are hard rules:
+# insert pauses into the slice you exported
+pausepalette apply Keychain.gcode --plan plan.json -o Keychain_pauses.gcode
 
-- **Boundary carries are preserved** — a colour bridging two layers (e.g. White
-  at the end of layer 1 and the start of layer 2) is never evicted before that
-  use, and each pause is anchored at the earliest valid tool-change block before
-  the colour it brings in.
-- **Stock the next section** — the last pause of the artwork lets the body
-  colours end up resident, so the rest of the print needs no more swaps.
-- **Initial load is darkest-to-lightest** — the four colours the first layers
-  need go in Pos1..Pos4 darkest first, and the reordered project's T0..T3 match.
+# both at once (file already sliced and in its final colour order)
+pausepalette convert Keychain.gcode --slots 4
 
-On the reference keychain print this reproduces the six-pause manual plan and
-beats it on total swaps.
+# look inside a file
+pausepalette analyze Keychain.3mf
+```
 
-## Where the reordered project comes from
+With Docker, prefix each command with `docker compose run --rm pausepalette`.
 
-A project `.3mf` is a zip of XML/JSON, so PausePalette rewrites it directly:
+## How it works (the short version)
 
-- the filament arrays are permuted into the planned order;
-- **every filament reference is remapped** (per-part `filament_id` and painted
-  segmentation) so the artwork is colour-identical — only the T numbers move;
-- the **stale embedded slice is stripped**, so the old-arrangement G-code can
-  never be printed by accident.
+The planner searches for the colour order that needs the fewest pauses, then the
+fewest spool swaps, then the fewest colour moves, and finally swaps darker colours
+in earlier. Some things it will never do:
 
-If a project's structure is not recognised, PausePalette stops and explains
-instead of guessing, and you can reorder the filaments by hand from the plan's
-instruction list.
+- A colour never changes slot mid-print — each spool has one home for the whole
+  print.
+- Spools you never swap out are loaded first.
+- Each pause is placed at the earliest safe tool-change moment, and one pause can
+  cover every slot that needs changing.
 
-## Verification (stage 3)
+Before writing anything at stage 3, PausePalette checks the slice matches the plan
+(printer model, filament order, tool changes and layers), then verifies the edited
+file is byte-for-byte identical to the original apart from the recorded
+insertions, with one pause per place it should be. If a project's internal layout
+isn't recognised, it stops and explains rather than guessing.
 
-The uploaded slice is checked before anything is written. These are hard stops:
-
-- the printer model matches the plan;
-- the filament list matches the plan's ordering (so "forgot to reorder" is caught);
-- the tool-change sequence and layers match the plan exactly.
-
-Then the edited file is verified:
-
-- byte-identical to the original outside the recorded insertions and edits;
-- the tool-change sequence is unchanged;
-- exactly one new `M400 U1` per pause, anchored before the right tool change;
-- the unload and re-feed steps are disabled (`M620.11 S0`) only in the block
-  that follows each pause.
-
-Every output carries: **print from file, never re-slice.** The technique is
-validated on a Bambu Lab A1, but each specific file has not been printed — skim
-the pause table before you start.
-
-## Scope and assumptions
-
-- **Dialect:** Bambu Studio / OrcaSlicer with AMS (the `T<n>` / `M620` /
-  `M620.11` tool-change blocks). Other slicers are future dialect profiles; the
-  planner core is slicer-agnostic. Real Bambu blocks are parsed as they are
-  written: the `M621` that closes a block can sit hundreds of lines below the
-  `M620` (after the flush and wipe sections), `T` lines may be indented, and
-  filaments with no "long retraction when cut" already carry `M620.11 S0` —
-  those blocks are left alone rather than edited.
-- **Stage 1 and slicing:** with a sliced project the plan is exact. Without a
-  slice it uses Bambu's stored filament sequence (provisional plan) or just
-  reorders and defers the plan to stage 3. Stage 3 always verifies the printer,
-  the filament ordering and — when known — the colour sequence before writing.
-- **Plates:** a project may hold several plates; the plan is made for one plate
-  and stage 3 picks the matching plate out of an uploaded `.3mf`.
-- PausePalette never slices and never talks to the printer, so it works with any
-  machine that runs the G-code its slicer produced.
-
-## Development
+## For developers
 
 ```sh
 pip install -e ".[web,dev]"
@@ -166,6 +161,8 @@ pausepalette/          core library (stdlib only)
   report.py            plan tables, instructions, checklist
   jobstore.py          file-based job store
   cli.py               command line
-webapp/                FastAPI + Jinja UI
+webapp/                FastAPI + Jinja UI (graphical plan, colour chips)
 tests/                 golden tests on a replica of the reference print
 ```
+
+PausePalette is MIT licensed.

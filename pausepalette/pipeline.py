@@ -50,18 +50,31 @@ def choose_filament_order(
     lums: dict[int, float],
     slots: int,
     n_filaments: int,
+    initial: list[int | None] | None = None,
 ) -> list[int]:
     """New filament order (list of old tool indices) from a tool sequence.
 
-    Rule 6: the initial `slots` colours become T0.., ordered darkest first; the
-    rest follow first-need order with a dark-to-light tiebreak.
+    The colour loaded in AMS slot 1 must be T0, slot 2 must be T1, and so on, so
+    the plan's slot order wins when it has one: colours that are never swapped
+    come first, then the rest. Without a plan (a reorder with no schedule yet)
+    the initial `slots` colours go first, darkest first, and the rest follow
+    first-need order with a dark-to-light tiebreak.
     """
     distinct: list[int] = []
     for t in sequence:
         if t not in distinct:
             distinct.append(t)
 
-    initial_tools = sorted(distinct[:slots], key=lambda t: (lums.get(t, 0.5), t))
+    if initial:
+        initial_tools = [t for t in initial if t is not None][:slots]
+        # anything the plan did not load initially still has to be ordered
+        for t in distinct:
+            if len(initial_tools) >= slots:
+                break
+            if t not in initial_tools:
+                initial_tools.append(t)
+    else:
+        initial_tools = sorted(distinct[:slots], key=lambda t: (lums.get(t, 0.5), t))
     order: list[int] = list(initial_tools)
 
     first_need: dict[int, int] = {}
@@ -91,8 +104,13 @@ def _filename_lums(gf: GcodeFile) -> dict[int, float]:
     return _lums_for(gf.filaments)
 
 
-def renumber_plan(plan: Plan, old_to_new: dict[int, int]) -> Plan:
-    """Return a copy of the plan with every tool index mapped to new numbering."""
+def renumber_plan(plan: Plan, order: list[int]) -> Plan:
+    """Return a copy of the plan with every tool index mapped into a new order.
+
+    ``order`` is the new filament list as old tool indices (``order[new] = old``).
+    """
+    old_to_new = {old: new for new, old in enumerate(order)}
+
     def m(t: int | None) -> int | None:
         return None if t is None else old_to_new[t]
 
@@ -139,12 +157,151 @@ def renumber_plan(plan: Plan, old_to_new: dict[int, int]) -> Plan:
                 z=p.z,
                 feed=p.feed,
                 temp=p.temp,
+                remaining=p.remaining,
             )
         )
     return new
 
 
-def plan_from_project(data: bytes, slots: int = 4, plate: int = 1) -> Stage1Result:
+def _sequence_from_orders(layer_orders: dict[int, list[int]]) -> tuple[list[int], list[int]]:
+    """The print's tool changes from a colour order for each layer.
+
+    Returns ``(tools, layers)``, tools 0-based and layers 1-based. A colour that
+    is already loaded carries over, so a colour used at the end of one layer and
+    the start of the next costs no change.
+    """
+    tools: list[int] = []
+    layers: list[int] = []
+    active: int | None = None
+    for layer in sorted(layer_orders):
+        for tool in layer_orders[layer]:
+            if tool == active:
+                continue
+            tools.append(tool - 1)
+            layers.append(layer)
+            active = tool
+    return tools, layers
+
+
+def _sequence_from_layers(
+    plate: threemf.PlateInfo,
+    used: dict[int, set[int]],
+    last_layer: int,
+) -> tuple[list[int], list[int]]:
+    """As above, but using the order the project itself stored for each layer."""
+    orders: dict[int, list[int]] = {}
+    for layer in range(1, last_layer + 1):
+        present = used.get(layer)
+        if not present:
+            continue
+        order = [t for t in plate.order_for_layer(layer) if t in present]
+        orders[layer] = order + sorted(t for t in present if t not in order)
+    return _sequence_from_orders(orders)
+
+
+#: how many colour swaps the order search may try before it settles
+ORDER_SEARCH_BUDGET = 300
+#: how far apart two colours may be swapped while searching
+ORDER_SEARCH_SPAN = 6
+
+
+def choose_layer_orders(
+    used: dict[int, set[int]],
+    lums: dict[int, float],
+    names: dict[int, str],
+    slots: int,
+    first_colour: int | None = None,
+    budget: int = ORDER_SEARCH_BUDGET,
+    max_span: int = ORDER_SEARCH_SPAN,
+) -> dict[int, list[int]]:
+    """The colour print order for each layer: fewest pauses, then fewest swaps.
+
+    The first layer starts with ``first_colour`` (the darkest colour by default)
+    and each later layer with the colour the one before it ended on, so nothing
+    needs swapping at a layer boundary; the rest of each layer follows darkest to
+    lightest. A bounded search then swaps colours within a layer while that
+    improves the plan, so the result is never worse than those rules alone.
+    """
+    layers = sorted(used)
+    if not layers:
+        return {}
+
+    # ``used`` holds 1-based filament ids; ``lums`` is indexed by tool
+    def luminance(colour: int) -> float:
+        return lums.get(colour - 1, 0.5)
+
+    darkest = min(used[layers[0]], key=lambda t: (luminance(t), t))
+    first = first_colour if first_colour in used[layers[0]] else darkest
+
+    def darkest_first(colours):
+        return sorted(colours, key=lambda t: (luminance(t), t))
+
+    orders: dict[int, list[int]] = {}
+    previous: int | None = None
+    for layer in layers:
+        present = used[layer]
+        if layer == layers[0] and first in present:
+            start = [first]
+        elif previous in present:
+            start = [previous]
+        else:
+            start = []
+        orders[layer] = start + darkest_first(t for t in present if t not in start)
+        previous = orders[layer][-1]
+
+    def key(candidate: dict[int, list[int]]):
+        return tuple((layer, tuple(candidate[layer])) for layer in layers)
+
+    def cost(candidate: dict[int, list[int]], thorough: bool = False) -> tuple[int, int]:
+        # the search scores many candidates, so it uses the cheaper planner;
+        # the winner is checked properly before it is returned
+        tools, block_layers = _sequence_from_orders(candidate)
+        plan = plan_slots(tools, block_layers, lums, names, slots=slots, thorough=thorough)
+        return (len(plan.pauses), plan.swaps_total)
+
+    # only a layer with more colours than slots has an order worth choosing:
+    # where they all fit, every colour is resident before it is used
+    if all(len(used[layer]) <= slots for layer in layers):
+        return orders
+
+    rules = {k: list(v) for k, v in orders.items()}
+    scores = {key(orders): cost(orders)}
+    best = scores[key(orders)]
+    movable = [layer for layer in layers if len(orders[layer]) > 1]
+    tried = 0
+    improved = True
+    while improved and tried < budget:
+        improved = False
+        for layer in movable:
+            size = len(orders[layer])
+            for span in range(1, max_span + 1):
+                for i in range(1, size - span):  # position 0 is the first colour
+                    if tried >= budget:
+                        break
+                    candidate = {k: list(v) for k, v in orders.items()}
+                    candidate[layer][i], candidate[layer][i + span] = (
+                        candidate[layer][i + span],
+                        candidate[layer][i],
+                    )
+                    tried += 1
+                    score = scores.get(key(candidate))
+                    if score is None:
+                        score = cost(candidate)
+                        scores[key(candidate)] = score
+                    if score < best:
+                        orders, best, improved = candidate, score, True
+
+    # the search scored candidates with the cheaper planner: keep whichever of
+    # the plain rules and the searched order the exact planner prefers (ties go
+    # to the rules, which start each layer on the colour the last one ended on)
+    if cost(orders, thorough=True) >= cost(rules, thorough=True):
+        return rules
+    return orders
+
+
+def plan_from_project(
+    data: bytes, slots: int = 4, plate: int = 1, first_colour: int | None = None
+) -> Stage1Result:
     info = threemf.read_project(data, plate=plate)
     notes: list[str] = []
     plates_meta = [
@@ -164,14 +321,21 @@ def plan_from_project(data: bytes, slots: int = 4, plate: int = 1) -> Stage1Resu
             raise StopAndExplain(
                 "the project's slice has no AMS tool changes — nothing to plan"
             )
+        if len(gf.filaments) != len(info.filaments):
+            raise StopAndExplain(
+                f"this project is inconsistent: it lists {len(info.filaments)} "
+                f"filament(s) but the slice inside it names {len(gf.filaments)}. "
+                f"PausePalette cannot reorder a project whose filament list and "
+                f"slice disagree — re-export the project from Bambu Studio / "
+                f"OrcaSlicer and try again."
+            )
         plan = plan_for_gcode(gf, slots)
         sequence = [b.tool for b in gf.tool_changes]
-        order = choose_filament_order(sequence, _filename_lums(gf), slots, len(gf.filaments))
-        old_to_new = {old: i for i, old in enumerate(order)}
-        new_plan = renumber_plan(plan, old_to_new)
-        new_plan.expected_tools = [old_to_new.get(b.tool, b.tool) for b in gf.tool_changes]
-        new_plan.expected_layers = [b.layer for b in gf.tool_changes]
-        new_plan.expected_demands = [old_to_new[t] for t in plan.demands]
+        order = choose_filament_order(
+            sequence, _filename_lums(gf), slots, len(gf.filaments), initial=plan.initial
+        )
+        new_plan = renumber_plan(plan, order)
+        _attach_plan_details(new_plan, gf, order=order)
     elif chosen is not None and chosen.sequence:
         # ---- unsliced but Bambu stored the tool sequence ----------------
         tools = [x - 1 for x in chosen.sequence]
@@ -184,57 +348,127 @@ def plan_from_project(data: bytes, slots: int = 4, plate: int = 1) -> Stage1Resu
         names = {i: n for i, n in enumerate(_assign_colour_letters(info.filaments))}
         plan = plan_slots(
             block_tools=tools,
-            block_layers=[0] * len(tools),
+            block_layers=[1] * len(tools),
             lums=lums,
             names=names,
             slots=slots,
         )
         plan.provisional = True
-        order = choose_filament_order(tools, lums, slots, len(info.filaments))
-        old_to_new = {old: i for i, old in enumerate(order)}
-        new_plan = renumber_plan(plan, old_to_new)
-        new_plan.expected_demands = [old_to_new[t] for t in plan.demands]
+        order = choose_filament_order(
+            tools, lums, slots, len(info.filaments), initial=plan.initial
+        )
+        new_plan = renumber_plan(plan, order)
+        new_plan.expected_demands = list(new_plan.demands)
         notes.append(
             "this project is not sliced, but Bambu Studio stored its filament "
             "sequence — the plan below is provisional: the exact pause positions "
             "are resolved when you upload the slice."
         )
     else:
-        # ---- unsliced and no sequence: reorder now, plan at stage 3 ------
-        sequence = []
-        if chosen is not None and chosen.first_layer_sequence:
-            sequence = [x - 1 for x in chosen.first_layer_sequence
-                        if 0 <= x - 1 < len(info.filaments)]
-        if sequence:
+        # ---- unsliced: work the whole print out from the model -----------
+        # The model says which filament each part prints with and how tall it
+        # is, so the layers each colour appears on can be recovered — that is
+        # the whole print, not just its start. PausePalette then chooses the
+        # colour order for each layer (fewest pauses, then fewest swaps) and
+        # writes it into the project, so the slicer prints that order.
+        lums = _lums_for(info.filaments)
+        names = {i: n for i, n in enumerate(_assign_colour_letters(info.filaments))}
+        used: dict[int, set[int]] = {}
+        layer_orders: dict[int, list[int]] = {}
+        tools: list[int] = []
+        block_layers: list[int] = []
+        from_model = False
+        if chosen is not None and info.layer_height:
+            geometry = threemf.filament_layers(data, chosen, info.layer_height)
+            if geometry is not None:
+                by_colour, _model_layers = geometry
+                for colour, where in by_colour.items():
+                    if 1 <= colour <= len(info.filaments):
+                        for layer in where:
+                            used.setdefault(layer, set()).add(colour)
+                layer_orders = choose_layer_orders(
+                    used, lums, names, slots, first_colour=first_colour
+                )
+                tools, block_layers = _sequence_from_orders(layer_orders)
+                from_model = bool(tools)
+        if not from_model and chosen is not None:
+            # no geometry to read: fall back to the layers Bambu stored an order
+            # for (the tail's order alone cannot say which colours it prints)
+            layer_orders = {}
+            tools = []
+            block_layers = []
+            usable = len(info.filaments)
+            first = [x - 1 for x in chosen.first_layer_sequence if 0 <= x - 1 < usable]
+            tools.extend(first)
+            block_layers.extend([1] * len(first))
+            for layer in sorted(chosen.layer_orders):
+                more = [x - 1 for x in chosen.layer_orders[layer] if 0 <= x - 1 < usable]
+                tools.extend(more)
+                block_layers.extend([layer] * len(more))
+        if tools:
+            plan = plan_slots(
+                block_tools=tools,
+                block_layers=block_layers,
+                lums=lums,
+                names=names,
+                slots=slots,
+            )
+            plan.provisional = True
             order = choose_filament_order(
-                sequence, _lums_for(info.filaments), slots, len(info.filaments)
+                tools, lums, slots, len(info.filaments), initial=plan.initial
             )
-            notes.append(
-                "this project is not sliced; the filament order was set from the "
-                "stored first-layer print sequence. The pause plan is computed "
-                "when you upload the slice."
+            new_plan = renumber_plan(plan, order)
+            # The sequence is read from the model rather than a slice, so it is
+            # not used as a hard check; stage 3 re-plans from the slice.
+            new_plan.expected_demands = []
+            known = sorted(set(block_layers))
+            span = (
+                f"layers {known[0]}–{known[-1]}" if len(known) > 1 else f"layer {known[0]}"
             )
+            if from_model:
+                new_plan.layer_orders = {k: list(v) for k, v in layer_orders.items()}
+                first_layer = min(layer_orders)
+                new_plan.first_colour = layer_orders[first_layer][0]
+                new_plan.first_colour_choices = sorted(used[first_layer])
+                notes.append(
+                    f"this project is not sliced; the plan below is the whole print, "
+                    f"worked out from the model's own geometry — which filament each "
+                    f"layer prints with. The colour order for each layer was chosen to "
+                    f"need the fewest pauses and is written into the project, so the "
+                    f"slicer prints it. It is provisional: the exact pause count and "
+                    f"positions are confirmed when you upload the slice."
+                )
+            else:
+                notes.append(
+                    f"this project is not sliced; the plan below is provisional, built "
+                    f"from the colour order Bambu Studio stored for {span}. Layers after "
+                    f"that, and the exact pause count and positions, are resolved when "
+                    f"you upload the slice."
+                )
         else:
             order = list(range(len(info.filaments)))
+            plan = Plan(slots=slots, demands=[], blocks=[], block_layers=[], initial=[],
+                        pauses=[], swaps_total=0, colour_moves=0)
+            plan.deferred = True
+            new_plan = renumber_plan(plan, order)
+            new_plan.expected_demands = []
             notes.append(
                 "this project is not sliced and carries no print sequence, so the "
                 "filament order is left as it is and the pause plan is computed "
                 "when you upload the slice."
             )
-        lums = _lums_for(info.filaments)
-        names = {i: n for i, n in enumerate(_assign_colour_letters(info.filaments))}
-        plan = Plan(slots=slots, demands=[], blocks=[], block_layers=[], initial=[],
-                    pauses=[], swaps_total=0, colour_moves=0)
-        plan.deferred = True
-        old_to_new = {old: i for i, old in enumerate(order)}
-        new_plan = renumber_plan(plan, old_to_new)
-        new_plan.expected_demands = []
 
     if not new_plan.pauses and not new_plan.deferred:
-        notes.append(
-            f"all {len(set(new_plan.demands))} colours fit in {slots} slots — "
-            f"no pauses are needed"
-        )
+        if new_plan.provisional:
+            notes.append(
+                f"the colours in the stored layers fit in {slots} slots — "
+                f"the full schedule is resolved from your slice"
+            )
+        else:
+            notes.append(
+                f"all {len(set(new_plan.demands))} colours fit in {slots} slots — "
+                f"no pauses are needed"
+            )
 
     new_plan.expected_filament_order = [info.filaments[o] for o in order]
     new_plan.filament_colour = [info.filaments[o] for o in order]
@@ -243,12 +477,11 @@ def plan_from_project(data: bytes, slots: int = 4, plate: int = 1) -> Stage1Resu
     new_plan.plate = info.plate if chosen is not None else None
     new_plan.original_filaments = list(info.filaments)
     new_plan.original_names = _assign_colour_letters(info.filaments)
-    for p in new_plan.pauses:
-        for s in p.swaps:
-            s.out_name = new_plan.tool_name(s.out_tool)
-            s.in_name = new_plan.tool_name(s.in_tool)
+    _name_swaps(new_plan)
 
-    reordered, report = threemf.reorder_project(data, order)
+    reordered, report = threemf.reorder_project(
+        data, order, layer_orders=new_plan.layer_orders or None, plate=new_plan.plate
+    )
     for w in report.warnings:
         notes.append(w)
     if info.reference_keys:
@@ -285,27 +518,34 @@ class Stage3Result:
     plan: Plan | None = None
 
 
-def _slice_text(data: bytes) -> tuple[str, str | None]:
-    if threemf.looks_like_zip(data):
-        got = threemf.extract_slice(data)
-        if got is None:
-            raise StopAndExplain(
-                "this .3mf has no sliced plate inside it — export the plate sliced "
-                "file from Bambu Studio and upload that"
-            )
-        name, text = got
-        return text, name
-    try:
-        return data.decode("utf-8"), None
-    except UnicodeDecodeError as exc:
-        raise StopAndExplain(f"could not read the uploaded file as G-code ({exc})") from exc
-
-
 def _name_swaps(plan: Plan) -> None:
     for p in plan.pauses:
         for s in p.swaps:
             s.out_name = plan.tool_name(s.out_tool)
             s.in_name = plan.tool_name(s.in_tool)
+
+
+def _attach_plan_details(plan: Plan, gf: GcodeFile, order: list[int] | None = None) -> Plan:
+    """Everything a plan needs from the slice it will be carried out on.
+
+    The same for every printer — planning and reordering never look at the
+    machine, only the G-code edit does (see :func:`insert_pauses`). ``order`` is
+    the new filament order (old tool index per new T) when the plan reorders the
+    list, ``None`` when the file's own numbering stands because it is already
+    sliced.
+    """
+    if order is None:
+        order = list(range(len(gf.filaments)))
+    new_of = {old: new for new, old in enumerate(order)}
+
+    plan.filament_colour = [gf.filaments[o] for o in order if o < len(gf.filaments)]
+    plan.filament_name = [C.name_for_hex(c) for c in plan.filament_colour]
+    plan.printer_model = plan.printer_model or gf.printer_model
+    plan.expected_tools = [new_of.get(b.tool, b.tool) for b in gf.tool_changes]
+    plan.expected_layers = [b.layer for b in gf.tool_changes]
+    plan.expected_demands = list(plan.demands)
+    _name_swaps(plan)
+    return plan
 
 
 def check_slice_against_plan(gf: GcodeFile, plan: Plan) -> None:
@@ -394,7 +634,7 @@ def _slice_text(data: bytes, plate: int | None = None) -> tuple[str, str | None]
         raise StopAndExplain(f"could not read the uploaded file as G-code ({exc})") from exc
 
 
-def insert_into_slice(data: bytes, plan: Plan, newline: str = "\n") -> Stage3Result:
+def insert_into_slice(data: bytes, plan: Plan, newline: str | None = None) -> Stage3Result:
     text, name = _slice_text(data, plate=plan.plate)
     gf = parse_gcode(text)
     check_slice_against_plan(gf, plan)
@@ -406,13 +646,9 @@ def insert_into_slice(data: bytes, plan: Plan, newline: str = "\n") -> Stage3Res
         if initial is not None and not initial:
             initial = None
         resolved = plan_for_gcode(gf, plan.slots, initial=initial)
-        resolved.printer_model = plan.printer_model or gf.printer_model
         resolved.plate = plan.plate
-        resolved.filament_colour = list(gf.filaments)
-        resolved.filament_name = list(gf.colour_names())
-        resolved.expected_tools = [b.tool for b in gf.tool_changes]
-        resolved.expected_layers = [b.layer for b in gf.tool_changes]
-        _name_swaps(resolved)
+        _attach_plan_details(resolved, gf)
+        resolved.printer_model = plan.printer_model or gf.printer_model
         notes.append(
             "the pause schedule was finalised from this slice"
             + (" (same as the provisional plan)" if plan.provisional else "")
@@ -432,19 +668,13 @@ def insert_into_slice(data: bytes, plan: Plan, newline: str = "\n") -> Stage3Res
 def plan_and_insert(
     gcode_bytes: bytes,
     slots: int = 4,
-    newline: str = "\n",
+    newline: str | None = None,
     plate: int | None = None,
 ) -> Stage3Result:
     text, name = _slice_text(gcode_bytes, plate=plate)
     gf = parse_gcode(text)
     plan = plan_for_gcode(gf, slots)
-    plan.filament_colour = list(gf.filaments)
-    plan.filament_name = list(gf.colour_names())
-    plan.printer_model = gf.printer_model
-    plan.expected_tools = [b.tool for b in gf.tool_changes]
-    plan.expected_layers = [b.layer for b in gf.tool_changes]
-    plan.expected_demands = list(plan.demands)
-    _name_swaps(plan)
+    _attach_plan_details(plan, gf)
     edited = insert_pauses(gf, plan, newline=newline)
     report = verify(gf, edited, plan)
     return Stage3Result(
@@ -478,6 +708,9 @@ def plan_to_dict(plan: Plan) -> dict:
         "filament_name": plan.filament_name,
         "original_filaments": plan.original_filaments,
         "original_names": plan.original_names,
+        "layer_orders": {str(layer): ids for layer, ids in plan.layer_orders.items()},
+        "first_colour": plan.first_colour,
+        "first_colour_choices": plan.first_colour_choices,
         "warnings": plan.warnings,
         "timeline": [{"label": s.label, "positions": s.positions} for s in plan.timeline],
         "pauses": [
@@ -500,6 +733,7 @@ def plan_to_dict(plan: Plan) -> dict:
                 "z": p.z,
                 "feed": p.feed,
                 "temp": p.temp,
+                "remaining": p.remaining,
             }
             for p in plan.pauses
         ],
@@ -533,6 +767,12 @@ def plan_from_dict(d: dict) -> Plan:
         filament_name=list(d.get("filament_name", [])),
         original_filaments=list(d.get("original_filaments", [])),
         original_names=list(d.get("original_names", [])),
+        layer_orders={
+            int(layer): list(ids)
+            for layer, ids in (d.get("layer_orders") or {}).items()
+        },
+        first_colour=d.get("first_colour"),
+        first_colour_choices=list(d.get("first_colour_choices", [])),
     )
     for p in d.get("pauses", []):
         plan.pauses.append(
@@ -555,6 +795,7 @@ def plan_from_dict(d: dict) -> Plan:
                 z=p.get("z", "0.4"),
                 feed=p.get("feed", "1200"),
                 temp=p.get("temp"),
+                remaining=p.get("remaining"),
             )
         )
     return plan

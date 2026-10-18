@@ -30,6 +30,29 @@ RE_DISABLED = re.compile(r"^\s*M620\.11 S0(?:\s*;.*)?$")
 RE_G1_Z = re.compile(r"^G1 Z([\d.]+) F(\d+)")
 RE_M104 = re.compile(r"^M104 S(\d+)")
 
+# The slicer's own estimate of how long the whole plate takes. Bambu Studio and
+# OrcaSlicer on a Bambu printer pack both figures onto one line:
+#   "; model printing time: 3h 16m 5s; total estimated time: 3h 22m 21s"
+# On any other printer OrcaSlicer / PrusaSlicer write, in the config block at
+# the end of the file:
+#   "; estimated printing time (normal mode) = 3h 16m 5s"
+# Both use the same get_time_dhms(), which emits any of "1d 2h 3m 4s",
+# "2h 3m 4s", "3m 4s", "4s" — so the value is a run of <number><unit> tokens.
+RE_TIME_VALUE = r"(\d+\s*[dhms](?:\s*\d+\s*[dhms])*)"
+RE_TIME_BAMBU = re.compile(
+    r"(total estimated time|model printing time)\s*[:=]\s*" + RE_TIME_VALUE, re.I
+)
+RE_TIME_ORCA = re.compile(
+    r"estimated printing time\s*\(\s*normal mode\s*\)\s*[:=]\s*" + RE_TIME_VALUE, re.I
+)
+RE_TIME_DHMS = re.compile(
+    r"(?:(\d+)\s*d)?\s*(?:(\d+)\s*h)?\s*(?:(\d+)\s*m)?\s*(?:(\d+)\s*s)?", re.I
+)
+RE_G1_E = re.compile(r"^\s*G[01]\b.*?\bE(-?\d*\.?\d+)", re.I)
+RE_G92 = re.compile(r"^\s*G92\b")
+RE_M82 = re.compile(r"^\s*M82\b")
+RE_M83 = re.compile(r"^\s*M83\b")
+
 # The re-feed group that follows an unload line (Bambu/Orca shape).
 REFED_TAIL = [
     re.compile(r"^\s*M620\.11 S1 I\d+ E\d"),
@@ -61,8 +84,98 @@ def split_lines(text: str) -> list[str]:
     return text.splitlines(keepends=True)
 
 
+def detect_newline(text: str) -> str:
+    """The line ending a file predominantly uses, for byte-faithful editing.
+
+    A file saved on Windows (or edited by a Windows tool) uses CRLF; the lines
+    we insert must match it, or the exported file ends up with mixed endings.
+    """
+    crlf = text.count("\r\n")
+    lf = text.count("\n") - crlf
+    return "\r\n" if crlf > lf else "\n"
+
+
 def _strip(line: str) -> str:
     return line.strip()
+
+
+def parse_time_dhms(value: str) -> float | None:
+    """Seconds from a slicer's time string.
+
+    The slicers write any subset of days/hours/minutes/seconds — "1d 8h 29m 45s",
+    "2h 41m", "38m 12s", "21s" — so every component is optional. A bare number
+    is read as seconds. ``None`` when nothing parses.
+    """
+    text = value.strip()
+    m = RE_TIME_DHMS.fullmatch(text)
+    if not m or not any(m.groups()):
+        if text.isdigit():
+            return float(text)
+        return None
+    d, h, mi, s = (int(g) if g else 0 for g in m.groups())
+    return float(d * 86400 + h * 3600 + mi * 60 + s)
+
+
+def _absorb_time_line(gf: GcodeFile, line: str) -> None:
+    """Read a slicer's estimated print time out of one comment line, if present.
+
+    Handles the Bambu one-liner ("; model printing time: X; total estimated
+    time: Y") and the Orca/Prusa line ("; estimated printing time (normal mode)
+    = Z"). The total includes start-up, so it wins over the model-only figure.
+    """
+    for m in RE_TIME_BAMBU.finditer(line):
+        key = m.group(1).lower()
+        value = m.group(2).strip()
+        gf.header[key.replace(" ", "_")] = value
+        secs = parse_time_dhms(value)
+        if secs is not None and (key.startswith("total") or gf.estimated_time is None):
+            gf.estimated_time = secs
+    if gf.estimated_time is None:
+        m = RE_TIME_ORCA.search(line)
+        if m:
+            secs = parse_time_dhms(m.group(1))
+            if secs is not None:
+                gf.estimated_time = secs
+                gf.header.setdefault("estimated_printing_time", m.group(1).strip())
+
+
+def extrusion_work(lines: list[str], at_lines: set[int]) -> tuple[dict[int, float], float]:
+    """Filament extruded before each line of interest, and in total.
+
+    Walks the G-code once and adds up every positive ``G1 ... E<val>`` move;
+    retractions and the negative half of a purge pair never subtract from the
+    work done. ``G92 E`` resets the extruder position and M82/M83 pick absolute
+    or relative E, all honoured. The result maps each requested line index to
+    the extrusion done *before* that line runs (which is where a pause is
+    inserted).
+    """
+    at = set(at_lines)
+    done: dict[int, float] = {}
+    total = 0.0
+    pos = 0.0
+    relative = False
+    for i, raw in enumerate(lines):
+        if i in at:
+            done[i] = total
+        line = raw.strip()
+        if RE_M83.match(line):
+            relative = True
+            continue
+        if RE_M82.match(line):
+            relative = False
+            continue
+        if RE_G92.match(line):
+            pos = 0.0
+            continue
+        m = RE_G1_E.match(line)
+        if m:
+            e = float(m.group(1))
+            delta = e if relative else e - pos
+            if not relative:
+                pos = e
+            if delta > 0:
+                total += delta
+    return done, total
 
 
 def parse_filaments(line: str) -> list[str]:
@@ -90,6 +203,7 @@ def parse_gcode(text: str) -> GcodeFile:
             gf.printer_model = m.group(1).strip()
             gf.header["printer_model"] = gf.printer_model
             continue
+        _absorb_time_line(gf, line)
         for key in (
             "machine_pause_gcode",
             "change_filament_gcode",
@@ -111,6 +225,26 @@ def parse_gcode(text: str) -> GcodeFile:
         if line.startswith("; EXECUTABLE_BLOCK_START"):
             break
 
+    # OrcaSlicer writes its config block at the *end* of the file for printers
+    # that are not Bambu, so the scan above can miss the filament list. Fall
+    # back to scanning the whole file.
+    if not gf.filaments or gf.printer_model is None:
+        for raw in lines:
+            line = _strip(raw)
+            if not gf.filaments:
+                m = RE_FILAMENT_COLOUR.match(line)
+                if m:
+                    gf.filaments = parse_filaments(line)
+                    gf.header["filament_colour"] = m.group(1)
+                    continue
+            if gf.printer_model is None:
+                m = RE_PRINTER_MODEL.match(line)
+                if m:
+                    gf.printer_model = m.group(1).strip()
+                    gf.header["printer_model"] = gf.printer_model
+            if gf.filaments and gf.printer_model is not None:
+                break
+
     # --- layer markers and tool changes ----------------------------------
     layer = 1
     total_layers = None
@@ -120,6 +254,10 @@ def parse_gcode(text: str) -> GcodeFile:
         if not raw.startswith(";"):
             continue
         line = raw.strip()
+        if gf.estimated_time is None:
+            # a slicer may write its estimate outside the header block the scan
+            # above stops at — OrcaSlicer puts the config block at the end
+            _absorb_time_line(gf, line)
         m = RE_LAYER_NUM_TOTAL.match(line)
         if m:
             layer = int(m.group(1))
@@ -257,6 +395,34 @@ def parse_gcode(text: str) -> GcodeFile:
         ordinal += 1
         i = max(end, i) + 1
 
+    # --- colour changes on everything that is not an AMS slice -----------
+    # Every slicer that prints more than one filament writes a tool change for
+    # it. When a machine has no custom change-filament G-code (the default
+    # outside Bambu), OrcaSlicer and PrusaSlicer emit a bare `T<n>`, sometimes
+    # with a trailing comment.
+    if not blocks:
+        gf.dialect = "generic"
+        ordinal = 0
+        for i, raw in enumerate(lines):
+            m = RE_T_COMMAND.match(_strip(raw))
+            if not m:
+                continue
+            tool = int(m.group(1))
+            if tool >= 100:  # Bambu's T255 / T1000 pseudo-tools
+                continue
+            blocks.append(
+                ToolChange(
+                    ordinal=ordinal,
+                    header_line=i,
+                    start_line=i,
+                    end_line=i,
+                    tool=tool,
+                    layer=layer_at.get(i, 1),
+                    demand_index=0,
+                )
+            )
+            ordinal += 1
+
     # assign demand indices (collapse consecutive same-tool blocks)
     demand = -1
     prev = None
@@ -269,9 +435,9 @@ def parse_gcode(text: str) -> GcodeFile:
     gf.tool_changes = blocks
 
     if not gf.filaments:
-        gf.warnings.append("no '; filament_colour =' header found")
+        gf.warnings.append("no '; filament_colour =' line found")
     if not blocks:
-        gf.warnings.append("no AMS tool-change blocks found")
+        gf.warnings.append("no tool changes found in this file")
     return gf
 
 

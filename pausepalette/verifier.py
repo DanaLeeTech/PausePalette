@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 
+from .dialects import bambu, generic
 from .gcode import parse_gcode
 from .model import GcodeFile, InsertionResult, Plan, VerificationReport
 
@@ -30,6 +31,10 @@ def verify(original: GcodeFile, result: InsertionResult, plan: Plan) -> Verifica
     report = VerificationReport(ok=True)
     edited_text = result.text
     edited = parse_gcode(edited_text)
+    dialect = getattr(original, "dialect", "bambu")
+    unload = bambu.unload_marker(original.printer_model)
+    pause_cmd = generic.pause_command(original.printer_model) or ""
+    pause_token = pause_cmd.splitlines()[0].strip() if pause_cmd else ""
 
     # 1. every byte outside the recorded changes is identical
     expected = _rebuild(original, result)
@@ -48,16 +53,26 @@ def verify(original: GcodeFile, result: InsertionResult, plan: Plan) -> Verifica
         f"{len(before)} blocks before, {len(after)} after" if before != after else f"{len(before)} blocks",
     )
 
-    # 3. exactly one *new* M400 U1 per pause (the file may already have one at
-    #    the end of the print)
-    before_u1 = sum(1 for ln in original.lines if RE_M400U1.match(ln.strip()))
-    u1 = [i for i, ln in enumerate(edited.lines) if RE_M400U1.match(ln.strip())]
+    # 3. one swap block per planned pause. Bambu pauses with M400 U1; any other
+    #    machine pauses with its own command, so the markers carry the check and
+    #    on Bambu the M400 U1 count does too.
+    starts = sum(1 for ln in edited.lines if RE_SWAP_START.match(ln.strip()))
+    ends = sum(1 for ln in edited.lines if RE_SWAP_END.match(ln.strip()))
     report.add(
-        "exactly one new M400 U1 per pause",
-        len(u1) == before_u1 + len(plan.pauses),
-        f"{len(u1)} found, {before_u1 + len(plan.pauses)} expected "
-        f"({before_u1} pre-existing)",
+        "one swap block per planned pause",
+        starts == len(plan.pauses) and ends == len(plan.pauses),
+        f"{starts} start / {ends} end markers, {len(plan.pauses)} pauses expected",
     )
+    if dialect == "bambu":
+        # the file may already have one at the end of the print
+        before_u1 = sum(1 for ln in original.lines if RE_M400U1.match(ln.strip()))
+        u1 = [i for i, ln in enumerate(edited.lines) if RE_M400U1.match(ln.strip())]
+        report.add(
+            "exactly one new M400 U1 per pause",
+            len(u1) == before_u1 + len(plan.pauses),
+            f"{len(u1)} found, {before_u1 + len(plan.pauses)} expected "
+            f"({before_u1} pre-existing)",
+        )
 
     # 4. each pause block sits immediately before its anchor block, with one T255
     ok_anchor = True
@@ -87,9 +102,13 @@ def verify(original: GcodeFile, result: InsertionResult, plan: Plan) -> Verifica
             detail.append(f"pause {pause.index}: start marker missing")
         else:
             body = [ln.strip() for ln in edited.lines[start:hdr]]
-            if sum(1 for ln in body if ln.startswith("T255")) != 1:
+            if dialect == "bambu":
+                if sum(1 for ln in body if ln.startswith(unload)) != 1:
+                    ok_anchor = False
+                    detail.append(f"pause {pause.index}: expected one {unload}")
+            elif pause_token and not any(ln.startswith(pause_token) for ln in body):
                 ok_anchor = False
-                detail.append(f"pause {pause.index}: expected one T255")
+                detail.append(f"pause {pause.index}: no {pause_token!r} in the block")
             if block.layer != pause.layer or block.tool != pause.tool:
                 ok_anchor = False
                 detail.append(
@@ -98,20 +117,21 @@ def verify(original: GcodeFile, result: InsertionResult, plan: Plan) -> Verifica
                 )
     report.add("pause blocks anchored before the right tool change", ok_anchor, "; ".join(detail))
 
-    # 5. unload and re-feed disabled in each anchored block (either our marker or
-    #    the slicer's own 'M620.11 S0' for filaments with no long retraction)
-    ok_d = True
-    detail = []
-    for pause in plan.pauses:
-        block = by_ordinal.get(pause.anchor_ordinal)
-        if block is None:
-            ok_d = False
-            continue
-        span = edited.lines[block.header_line : block.end_line + 1]
-        count = sum(1 for ln in span if RE_DISABLED_FORM.match(ln.strip()))
-        if count != 2:
-            ok_d = False
-            detail.append(f"T{block.tool}: {count} disabled lines, expected 2")
-    report.add("unload and re-feed disabled in the following block", ok_d, "; ".join(detail))
+    # 5. unload and re-feed disabled in each anchored block (Bambu only — other
+    #    machines keep their own change sequence untouched)
+    if dialect == "bambu":
+        ok_d = True
+        detail = []
+        for pause in plan.pauses:
+            block = by_ordinal.get(pause.anchor_ordinal)
+            if block is None:
+                ok_d = False
+                continue
+            span = edited.lines[block.header_line : block.end_line + 1]
+            count = sum(1 for ln in span if RE_DISABLED_FORM.match(ln.strip()))
+            if count != 2:
+                ok_d = False
+                detail.append(f"T{block.tool}: {count} disabled lines, expected 2")
+        report.add("unload and re-feed disabled in the following block", ok_d, "; ".join(detail))
 
     return report

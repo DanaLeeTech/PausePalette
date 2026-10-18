@@ -45,6 +45,14 @@ class GcodeFile:
     layers: list[LayerMarker] = field(default_factory=list)
     tool_changes: list[ToolChange] = field(default_factory=list)
 
+    # Which dialect the file is written in:
+    #   "bambu"   Bambu Studio / OrcaSlicer on an AMS — M620…M621 blocks
+    #   "generic" anything else — the slicer's own pause, plain `T<n>` changes
+    dialect: str = "bambu"
+
+    # The slicer's own estimate of the whole plate's print time, in seconds.
+    estimated_time: float | None = None
+
     # Raw header values, kept verbatim for reporting.
     header: dict[str, str] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
@@ -85,9 +93,21 @@ class Pause:
     z: str = "0.4"
     feed: str = "1200"
     temp: int | None = None
+    # Estimated printing time left when this pause is reached, in seconds. None
+    # when the plan was not made from a slice that carries a time estimate.
+    remaining: float | None = None
 
     def swap_summary(self) -> str:
         return "; ".join(s.describe() for s in self.swaps)
+
+    @property
+    def remaining_text(self) -> str:
+        """The remaining time as a short label ('2h 41m'), or '' when unknown."""
+        if self.remaining is None:
+            return ""
+        from .report import format_duration
+
+        return format_duration(self.remaining)
 
 
 @dataclass
@@ -131,12 +151,34 @@ class Plan:
     original_filaments: list[str] = field(default_factory=list)
     original_names: list[str] = field(default_factory=list)
 
+    # The colour order the plan chose for each layer (original 1-based filament
+    # ids, print order) and the colour it starts with. Written into the reordered
+    # project, so the slicer prints the order the plan was made for.
+    layer_orders: dict[int, list[int]] = field(default_factory=dict)
+    first_colour: int | None = None
+    first_colour_choices: list[int] = field(default_factory=list)
+
     def tool_name(self, tool: int | None) -> str:
         if tool is None:
             return "empty"
         if 0 <= tool < len(self.filament_name):
             return self.filament_name[tool]
         return f"T{tool}"
+
+    def tool_after(self, pause: Pause) -> int:
+        """The colour printed once the pause's swaps are done."""
+        return pause.tool
+
+    def tool_before(self, pause: Pause) -> int | None:
+        """The last colour the print used before the machine stopped.
+
+        A pause sits in front of the block at ``anchor_ordinal``, so the block
+        before that one is the colour being printed when the pause hits — what
+        the nozzle still holds when the spools are swapped. ``None`` when the
+        pause comes before the very first block.
+        """
+        i = pause.anchor_ordinal - 1
+        return self.blocks[i] if 0 <= i < len(self.blocks) else None
 
 
 @dataclass

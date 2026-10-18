@@ -1,92 +1,477 @@
+/* PausePalette — neo-brutalist skin.
+   Tokens are shadcn-style HSL channels; the light theme is the design
+   default and .dark is the same system on a dark ground. Chunky borders and
+   hard offset shadows are drawn in --ink, which stays near-black in light
+   and steps back to the dark border channel so it reads on dark cards.
+   Colours that carry data — the filament chips — keep their inline fills;
+   only their border and shape come from the theme. */
+
 :root {
-  --bg: #14161a;
-  --panel: #1c1f25;
-  --panel-2: #23272f;
-  --line: #2f343d;
-  --fg: #e7e9ee;
-  --muted: #98a0ad;
-  --accent: #7dd3a0;
-  --accent-2: #6ea8fe;
-  --bad: #ff7b72;
-  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --background: 0 0% 99%;
+  --foreground: 0 0% 6%;
+  --card: 0 0% 100%;
+  --card-foreground: 0 0% 6%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 0 0% 6%;
+  --primary: 185 100% 38%;
+  --primary-foreground: 0 0% 5%;
+  --secondary: 15 98% 53%;
+  --secondary-foreground: 0 0% 5%;
+  --muted: 185 28% 94%;
+  --muted-foreground: 190 12% 36%;
+  --accent: 337 90% 92%;
+  --accent-foreground: 337 50% 18%;
+  --destructive: 0 76% 48%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 185 18% 84%;
+  --input: 185 20% 70%;
+  --ring: 185 100% 30%;   /* darkened from the fill cyan: 4:1 focus indicator on white */
+  --link: 185 100% 26%;   /* link text, 5.3:1 on the light ground */
+
+  --radius: 0.75rem;
+
+  /* neo-brutalism: the ink of the thick borders and hard shadows, plus the
+     logo's yellow for caution notices */
+  --ink: 0 0% 9%;
+  --warn: 45 92% 55%;
+  --warn-foreground: 0 0% 5%;
+
+  --font-sans: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-display: 'Hanken Grotesk', 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.dark {
+  --background: 0 0% 7%;
+  --foreground: 0 0% 96%;
+  --card: 0 0% 10%;
+  --card-foreground: 0 0% 96%;
+  --popover: 0 0% 10%;
+  --popover-foreground: 0 0% 96%;
+  --primary: 185 100% 44%;
+  --primary-foreground: 0 0% 4%;
+  --secondary: 15 98% 60%;
+  --secondary-foreground: 0 0% 5%;
+  --muted: 185 20% 15%;
+  --muted-foreground: 185 12% 68%;
+  --accent: 337 50% 22%;
+  --accent-foreground: 337 95% 88%;
+  --destructive: 0 72% 55%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 185 15% 24%;
+  --input: 185 15% 35%;
+  --ring: 185 100% 44%;
+  --link: 185 100% 52%;
+
+  --radius: 0.75rem;
+
+  --ink: 185 16% 38%;
+  --warn: 45 92% 58%;
+  --warn-foreground: 0 0% 5%;
 }
 
 * { box-sizing: border-box; }
+
 body {
   margin: 0;
-  background: var(--bg);
-  color: var(--fg);
-  font: 15px/1.55 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.55;
 }
+
+::selection { background: hsl(var(--accent)); color: hsl(var(--accent-foreground)); }
+
+/* every focus stop gets a fat cyan ring */
+:focus-visible { outline: 3px solid hsl(var(--ring)); outline-offset: 2px; }
+input:focus { outline: 3px solid hsl(var(--ring)); outline-offset: 2px; }
+
+/* --- chrome bar --------------------------------------------------------- */
+
 .top {
-  display: flex; align-items: baseline; gap: 14px;
-  padding: 18px 24px; border-bottom: 1px solid var(--line);
-  background: linear-gradient(180deg, #191c21, #14161a);
+  position: sticky; top: 0; z-index: 20;
+  display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px;
+  /* right padding leaves room for the pinned theme toggle (40px wide at
+     right: 24px) so it never overlaps the brand */
+  padding: 12px 78px 12px 24px;
+  background: hsl(var(--card));
+  border-bottom: 3px solid hsl(var(--ink));
 }
-.brand { color: var(--fg); text-decoration: none; font-weight: 700; letter-spacing: .2px; }
-.brand::before { content: "◧ "; color: var(--accent); }
-.tag { color: var(--muted); font-size: 13px; }
+.brand {
+  display: inline-flex; align-items: center; gap: 10px;
+  color: hsl(var(--foreground)); text-decoration: none;
+  font-family: var(--font-display); font-weight: 700; font-size: 20px;
+  letter-spacing: -0.01em;
+}
+.brand .logo {
+  display: block; width: 38px; height: 38px;
+  border: 2px solid hsl(var(--ink)); border-radius: 0.55rem;
+  background: hsl(var(--card)); box-shadow: 3px 3px 0 hsl(var(--ink));
+  transition: transform .12s ease, box-shadow .12s ease;
+}
+.brand:hover .logo { transform: translate(2px, 2px); box-shadow: 1px 1px 0 hsl(var(--ink)); }
+/* Pinned to the header's top-right corner, level with the logo. */
+.theme-toggle { position: absolute; top: 12px; right: 24px; }
+
 main { max-width: 980px; margin: 0 auto; padding: 24px; }
-.bottom { max-width: 980px; margin: 24px auto 48px; padding: 0 24px; color: var(--muted); font-size: 12.5px; }
 
-h1 { font-size: 22px; margin: 0 0 8px; }
-h2 { font-size: 16px; margin: 0 0 12px; }
-.hero { padding: 8px 0 20px; }
-.hero h1 { font-size: 26px; }
-.hero p { color: var(--muted); max-width: 62ch; margin: 0; }
+h1, h2, h3 { font-family: var(--font-display); }
+h1 { font-size: 24px; font-weight: 700; letter-spacing: -0.01em; margin: 0 0 8px; }
+h2 { font-size: 17px; font-weight: 700; margin: 0 0 12px; }
+.hero { padding: 8px 0 22px; }
+.hero h1 { font-size: 30px; letter-spacing: -0.02em; }
+.hero p { color: hsl(var(--muted-foreground)); max-width: 62ch; margin: 0; }
 
-.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-@media (max-width: 780px) { .grid { grid-template-columns: 1fr; } }
+a { color: hsl(var(--link)); text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
+main a:not(.btn):not(.brand):hover {
+  background: hsl(var(--accent)); color: hsl(var(--accent-foreground));
+  text-decoration-color: hsl(var(--accent-foreground));
+}
+
+/* The two index cards share three rows — heading, blurb, form — so both forms
+   start at the same height no matter how long the blurbs are. Every gap between
+   blocks in a card is 14px: the same as the one between a field and the button
+   under it. The row gap is 0 on purpose — the spacing comes from the margins
+   above, which keeps a label snug against the field it names (8px) and makes the
+   stacked layout at narrow widths land on the same numbers. The right card's
+   blurb-to-field gap stays the odd one out, because its blurb is a line shorter
+   and the shared row is sized by the left card's. */
+.grid {
+  display: grid; grid-template-columns: 1fr 1fr; column-gap: 20px;
+  grid-template-rows: auto auto auto;
+}
+.grid > .card { display: grid; grid-template-rows: subgrid; grid-row: span 3; }
+.grid > .card > h2 { margin-bottom: 14px; }
+.grid > .card > p { margin-bottom: 14px; }
+/* The blurb already supplies the gap above the first field, and the row gap
+   supplies the one below it, so the first label adds nothing of its own. */
+.grid > .card form > label:first-child { margin: 0; }
+@media (max-width: 780px) {
+  .grid { grid-template-columns: 1fr; grid-template-rows: none; }
+  .grid > .card { display: block; }
+}
+
+/* --- card / panel ------------------------------------------------------- */
 
 .card {
-  background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
-  padding: 18px 18px 20px; margin-bottom: 16px;
+  background: hsl(var(--card)); color: hsl(var(--card-foreground));
+  border: 2px solid hsl(var(--ink)); border-radius: var(--radius);
+  box-shadow: 6px 6px 0 hsl(var(--ink));
+  padding: 20px 20px 22px; margin-bottom: 22px;
 }
 .card p { margin: 0 0 12px; }
-.muted { color: var(--muted); }
-.ok { color: var(--accent); }
-.bad { color: var(--bad); }
+.muted { color: hsl(var(--muted-foreground)); }
+.ok { color: hsl(var(--link)); font-weight: 600; }
+.bad { color: hsl(var(--destructive)); font-weight: 600; }
+/* Sits on the heading's optical centre — middle, not a baseline nudge — so the
+   badge reads level with the words instead of hanging below them. */
 .step {
-  display: inline-grid; place-items: center; width: 22px; height: 22px; margin-right: 8px;
-  border-radius: 999px; background: var(--accent); color: #08240f; font-size: 13px; font-weight: 700;
+  display: inline-grid; place-items: center; width: 24px; height: 24px;
+  margin-right: 8px; vertical-align: middle;
+  border-radius: 0.4rem; border: 2px solid hsl(var(--ink));
+  background: hsl(var(--secondary)); color: hsl(var(--secondary-foreground));
+  font-size: 13px; font-weight: 700; box-shadow: 2px 2px 0 hsl(var(--ink));
 }
 
-label { display: block; margin: 12px 0; color: var(--muted); font-size: 13.5px; }
-.row { display: flex; gap: 16px; }
+/* --- inputs ------------------------------------------------------------- */
+
+label { display: block; margin: 14px 0; color: hsl(var(--muted-foreground)); font-size: 13.5px; }
+.row { display: flex; gap: 20px; }
 .row label { flex: 0 0 auto; }
 input[type=file], input[type=number] {
-  display: block; width: 100%; margin-top: 6px; padding: 10px;
-  background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; color: var(--fg);
+  display: block; width: 100%; margin-top: 8px; padding: 10px 12px;
+  background: hsl(var(--card)); color: hsl(var(--foreground));
+  border: 2px solid hsl(var(--ink)); border-radius: calc(var(--radius) - 4px);
+  box-shadow: 3px 3px 0 hsl(var(--ink));
+  font: inherit;
 }
-input[type=number] { max-width: 120px; }
-button, .btn {
-  display: inline-block; padding: 10px 16px; border-radius: 8px; border: 1px solid transparent;
-  background: var(--accent); color: #08240f; font-weight: 650; font-size: 14px;
-  cursor: pointer; text-decoration: none;
+input[type=file] { cursor: pointer; }
+input[type=file]::file-selector-button {
+  margin-right: 12px; padding: 6px 12px; cursor: pointer;
+  background: hsl(var(--secondary)); color: hsl(var(--secondary-foreground));
+  border: 2px solid hsl(var(--ink)); border-radius: calc(var(--radius) - 6px);
+  font-family: var(--font-display); font-weight: 700; font-size: 13px;
 }
-button:hover, .btn:hover { filter: brightness(1.06); }
-.btn.ghost { background: transparent; color: var(--fg); border-color: var(--line); }
-.downloads { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
-.steps { margin: 0 0 12px; padding-left: 22px; }
-.steps li { margin: 4px 0; }
+input[type=number] { max-width: 130px; }
 
-table { width: 100%; border-collapse: collapse; font-size: 14px; }
-th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
-th { color: var(--muted); font-weight: 600; font-size: 12.5px; text-transform: uppercase; letter-spacing: .04em; }
-td code, code { font-family: var(--mono); font-size: 13px; }
+/* the first-colour picker in the stage-2 card */
+.first-colour {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin: 16px 0 4px;
+}
+.first-colour label { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 13.5px; }
+.first-colour select {
+  padding: 8px 10px; background: hsl(var(--card)); color: hsl(var(--foreground));
+  border: 2px solid hsl(var(--ink)); border-radius: calc(var(--radius) - 4px);
+  box-shadow: 3px 3px 0 hsl(var(--ink)); font: inherit;
+}
+.first-colour .muted { font-size: 12.5px; }
+
+/* --- buttons ------------------------------------------------------------ */
+
+button, .btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 10px 18px; border-radius: var(--radius);
+  border: 2px solid hsl(var(--ink));
+  background: hsl(var(--primary)); color: hsl(var(--primary-foreground));
+  font-family: var(--font-display); font-weight: 700; font-size: 14px;
+  box-shadow: 4px 4px 0 hsl(var(--ink));
+  cursor: pointer; text-decoration: none;
+  transition: transform .12s ease, box-shadow .12s ease;
+}
+button:hover, .btn:hover { transform: translate(2px, 2px); box-shadow: 2px 2px 0 hsl(var(--ink)); }
+button:active, .btn:active { transform: translate(4px, 4px); box-shadow: none; }
+
+.btn.ghost { background: hsl(var(--card)); color: hsl(var(--foreground)); box-shadow: 3px 3px 0 hsl(var(--ink)); }
+
+.downloads { display: flex; flex-wrap: wrap; gap: 10px; margin: 14px 0; }
+
+ol.steps { list-style: none; counter-reset: step; margin: 0 0 12px; padding: 0; }
+ol.steps li { position: relative; padding-left: 34px; margin: 10px 0; counter-increment: step; }
+ol.steps li::before {
+  content: counter(step); position: absolute; left: 0; top: -1px;
+  display: grid; place-items: center; width: 22px; height: 22px;
+  background: hsl(var(--accent)); color: hsl(var(--accent-foreground));
+  border: 2px solid hsl(var(--ink)); border-radius: 0.4rem;
+  font-size: 12px; font-weight: 700;
+}
+
+/* --- tables ------------------------------------------------------------- */
+
+table {
+  width: auto; min-width: 100%; border-collapse: separate; border-spacing: 0;
+  border: 2px solid hsl(var(--ink)); border-radius: var(--radius);
+  overflow: hidden; font-size: 14px;
+}
+.table-scroll { overflow-x: auto; }
+th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid hsl(var(--border)); vertical-align: top; }
+th {
+  background: hsl(var(--muted)); color: hsl(var(--foreground));
+  border-bottom: 2px solid hsl(var(--ink));
+  font-family: var(--font-display); font-weight: 700;
+  font-size: 12px; text-transform: uppercase; letter-spacing: .06em;
+}
+tbody tr:last-child th, tbody tr:last-child td { border-bottom: none; }
+tbody tr:hover { background: hsl(var(--muted)); }
+td code, code { font-family: var(--font-mono); font-size: 13px; }
 
 .stats { display: flex; flex-wrap: wrap; gap: 22px; }
-.stats .k { display: block; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
-.stats .v { font-size: 16px; }
-
-.banner { padding: 12px 14px; border-radius: 10px; margin-bottom: 16px; border: 1px solid var(--line); }
-.banner.error { background: #2a1b1b; border-color: #5b2b2b; color: #ffc9c4; }
-
-details { margin: 10px 0; }
-summary { cursor: pointer; color: var(--muted); }
-pre.checklist {
-  background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
-  padding: 14px; overflow: auto; font-family: var(--mono); font-size: 12.5px;
-  white-space: pre-wrap;
+.stats .k {
+  display: block; color: hsl(var(--muted-foreground)); font-size: 11.5px;
+  text-transform: uppercase; letter-spacing: .06em;
 }
-footer { color: var(--muted); }
+.stats .v { font-family: var(--font-display); font-weight: 700; font-size: 16px; }
+
+.banner {
+  padding: 14px 16px; border-radius: var(--radius); margin-bottom: 18px;
+  background: hsl(var(--card)); color: hsl(var(--card-foreground));
+  border: 2px solid hsl(var(--ink)); box-shadow: 4px 4px 0 hsl(var(--ink));
+}
+.banner strong { font-family: var(--font-display); font-weight: 700; }
+.banner.error { background: hsl(var(--destructive)); color: hsl(var(--destructive-foreground)); }
+
+details { margin: 14px 0; }
+summary {
+  display: inline-flex; align-items: center; gap: 8px;
+  list-style: none; cursor: pointer;
+  padding: 8px 14px; border-radius: var(--radius);
+  background: hsl(var(--card)); color: hsl(var(--foreground));
+  border: 2px solid hsl(var(--ink)); box-shadow: 3px 3px 0 hsl(var(--ink));
+  font-family: var(--font-display); font-weight: 700; font-size: 13.5px;
+  transition: transform .12s ease, box-shadow .12s ease;
+}
+summary::-webkit-details-marker { display: none; }
+summary:hover { transform: translate(2px, 2px); box-shadow: 1px 1px 0 hsl(var(--ink)); }
+details[open] > summary { background: hsl(var(--muted)); box-shadow: none; transform: translate(3px, 3px); }
+
+pre.checklist {
+  background: hsl(var(--muted)); color: hsl(var(--foreground));
+  border: 2px solid hsl(var(--ink)); border-radius: var(--radius);
+  box-shadow: 4px 4px 0 hsl(var(--ink));
+  padding: 16px; overflow: auto;
+  font-family: var(--font-mono); font-size: 12.5px; white-space: pre-wrap;
+}
+
+/* --- the graphical plan ---------------------------------------------------
+   Every colour reference carries a chip drawn from its actual hex. Light
+   filaments (white, silver, yellow) keep the ink border so they read on both
+   grounds; the chips are flat fills with no gradient. */
+
+h3.sub {
+  font-size: 12px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .08em; color: hsl(var(--muted-foreground)); margin: 20px 0 10px;
+}
+.h2-note { color: hsl(var(--muted-foreground)); font-weight: 400; font-size: 13px; }
+
+.chip {
+  display: inline-block; flex: 0 0 auto; width: 14px; height: 14px;
+  border-radius: 4px; border: 2px solid hsl(var(--ink));
+  vertical-align: -2px;
+}
+.chip.sm { width: 11px; height: 11px; border-radius: 3px; }
+.chip.lg { width: 44px; height: 44px; border-radius: 0.5rem; box-shadow: 3px 3px 0 hsl(var(--ink)); }
+.chip-empty, .chip-unknown {
+  background: transparent !important;
+  border: 2px dashed hsl(var(--muted-foreground)); box-shadow: none;
+}
+
+/* A chip and the colour's name. Deliberately inline rather than a flex row: as
+   a flex container the pair has no text baseline of its own, so whatever it sits
+   beside ends up out of step with it. Inline, the name rides the surrounding
+   text's baseline and the chip — taller than the text — is centred on it. */
+.cn { display: inline; white-space: nowrap; }
+.cn .chip { margin-right: 6px; vertical-align: middle; }
+.stats-chips { display: inline-flex; align-items: center; gap: 3px; }
+
+/* AMS position boxes */
+.slots { display: flex; flex-wrap: wrap; gap: 12px; margin: 6px 0; }
+.slot {
+  min-width: 104px; padding: 12px; display: flex; flex-direction: column;
+  align-items: center; gap: 8px;
+  background: hsl(var(--card)); color: hsl(var(--card-foreground));
+  border: 2px solid hsl(var(--ink)); border-radius: var(--radius);
+  box-shadow: 4px 4px 0 hsl(var(--ink));
+}
+.slot-empty { border-style: dashed; box-shadow: none; background: transparent; }
+.slot-pos { color: hsl(var(--muted-foreground)); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+.slot-name { font-family: var(--font-display); font-weight: 600; font-size: 13px; text-align: center; }
+.slot-tool { color: hsl(var(--muted-foreground)); font-size: 11px; font-family: var(--font-mono); }
+
+/* positions x pauses grid: columns are the slots, rows are the print phases */
+.tl-scroll { overflow-x: auto; margin-bottom: 4px; padding: 4px; }
+table.tl { width: auto; min-width: 100%; }
+.tl-corner {
+  text-align: left; color: hsl(var(--muted-foreground)); font-size: 12px; white-space: nowrap;
+  text-transform: none; letter-spacing: 0;
+}
+.tl-pos { text-align: center; white-space: nowrap; }
+/* The step reads down two rows — which pause, then which layer — with the pair
+   of colours it sits between on the right of those rows, level with them. The
+   colour lines line their chips up with each other, so the two ends of the swap
+   read as one matched pair rather than a value and an aside. */
+.tl-step {
+  display: grid; grid-template-columns: auto auto; align-items: baseline;
+  column-gap: 16px; row-gap: 2px;
+  text-align: left; vertical-align: middle; white-space: nowrap;
+}
+.tl-label { grid-column: 1; grid-row: 1; font-family: var(--font-display); font-weight: 700; font-size: 12px; text-transform: none; letter-spacing: 0; }
+.tl-layer { grid-column: 1; grid-row: 2; color: hsl(var(--muted-foreground)); font-size: 11px; font-weight: 400; text-transform: none; letter-spacing: 0; }
+.tl-colours {
+  grid-column: 2; grid-row: 1 / span 2; justify-self: end;
+  display: grid; grid-template-columns: auto auto; align-items: baseline;
+  column-gap: 6px; row-gap: 2px;
+  font-size: 11px; color: hsl(var(--muted-foreground));
+  text-transform: none; letter-spacing: 0;
+}
+.tl-colours > span { display: contents; }   /* the words and the chip line up in columns */
+.tl-cell { text-align: center; }
+/* the matrix is the point of this table: the colours get the room, twice the
+   size of a chip anywhere else on the page */
+.tl-cell .chip { width: 28px; height: 28px; border-radius: 8px; }
+
+/* pause cards */
+.pauses { display: flex; flex-direction: column; gap: 14px; margin-bottom: 4px; }
+.pause-card {
+  background: hsl(var(--card)); color: hsl(var(--card-foreground));
+  border: 2px solid hsl(var(--ink)); border-radius: var(--radius);
+  box-shadow: 4px 4px 0 hsl(var(--ink));
+  padding: 14px 16px;
+}
+.pause-head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.pause-no { font-family: var(--font-display); font-weight: 700; }
+.pause-of, .pause-meta { color: hsl(var(--muted-foreground)); font-size: 12.5px; }
+.pause-meta { border-left: 2px solid hsl(var(--border)); padding-left: 10px; }
+/* estimated printing time left after the pause: reads as part of the layer
+   stat, so no divider of its own — the dash is the separator */
+.pause-left { color: hsl(var(--muted-foreground)); font-size: 12.5px; white-space: nowrap; }
+/* the same pair in a pause card's head: one line, pushed to the right of the
+   pause it belongs to. Both ends are muted alike and sit on the text baseline,
+   with the same 6px either side of each chip, split by the same thin rule the
+   head already uses between its stats. */
+.pause-colours { margin-left: auto; font-size: 13px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; color: hsl(var(--muted-foreground)); }
+.pause-colours > span { display: flex; align-items: baseline; gap: 6px; }
+.pc-after { border-left: 2px solid hsl(var(--border)); padding-left: 12px; }
+.pause-check { width: 18px; height: 18px; margin: 0; accent-color: hsl(var(--primary)); cursor: pointer; }
+ul.swaps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.swap { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; font-size: 13.5px; }
+.sw-pos { color: hsl(var(--muted-foreground)); font-size: 12px; min-width: 52px; font-family: var(--font-mono); }
+.sw-arrow { color: hsl(var(--muted-foreground)); }
+
+/* positions per colour */
+ul.homes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 9px; }
+.homes li { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; font-size: 13.5px; }
+.homes-pos { color: hsl(var(--muted-foreground)); font-size: 12.5px; }
+
+/* filament list */
+ol.filament-list { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-wrap: wrap; gap: 10px; }
+ol.filament-list li {
+  display: flex; align-items: center; gap: 8px; font-size: 13px;
+  background: hsl(var(--card)); border: 2px solid hsl(var(--ink));
+  border-radius: var(--radius); box-shadow: 2px 2px 0 hsl(var(--ink));
+  padding: 6px 13px 6px 10px;
+}
+.fl-no, .fl-tool { color: hsl(var(--muted-foreground)); font-size: 11.5px; font-family: var(--font-mono); }
+.fl-name { font-family: var(--font-display); font-weight: 600; }
+
+.banner.print-note {
+  background: hsl(var(--warn)); color: hsl(var(--warn-foreground));
+  margin-bottom: 4px;
+}
+
+/* --- job actions: regenerate the plan / delete the job ------------------ */
+.job-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.job-head h1 { margin: 0; }
+.actions { display: inline-flex; gap: 10px; }
+.actions form { display: inline-flex; margin: 0; }
+.icon-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px; padding: 0; border-radius: var(--radius);
+  background: hsl(var(--card)); border: 2px solid hsl(var(--ink));
+  color: hsl(var(--foreground)); box-shadow: 3px 3px 0 hsl(var(--ink));
+  cursor: pointer;
+}
+.icon-btn:hover { background: hsl(var(--muted)); transform: translate(2px, 2px); box-shadow: 1px 1px 0 hsl(var(--ink)); }
+.icon-btn.danger:hover { background: hsl(var(--destructive)); color: hsl(var(--destructive-foreground)); }
+svg.icon { display: block; width: 18px; height: 18px; fill: currentColor; }
+.theme-toggle .icon-sun { display: none; }
+.dark .theme-toggle .icon-sun { display: block; }
+.dark .theme-toggle .icon-moon { display: none; }
+td.actions-col { width: 1%; white-space: nowrap; text-align: right; }
+.sr {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+.small { font-size: 12.5px; }
+
+@media print {
+  /* printing always uses the paper theme, whatever the screen theme is */
+  :root, .dark {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 0%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 0%;
+    --muted: 0 0% 95%;
+    --muted-foreground: 0 0% 25%;
+    --border: 0 0% 72%;
+    --ink: 0 0% 0%;
+    --primary: 185 100% 24%;
+    --primary-foreground: 0 0% 0%;
+    --secondary: 0 0% 95%;
+    --secondary-foreground: 0 0% 0%;
+    --accent: 0 0% 95%;
+    --accent-foreground: 0 0% 0%;
+    --destructive: 0 0% 100%;
+    --destructive-foreground: 0 0% 0%;
+    --warn: 0 0% 100%;
+    --warn-foreground: 0 0% 0%;
+    --link: 0 0% 0%;
+  }
+
+  .top, .downloads, form, .banner.print-note, .actions, .actions-col, .theme-toggle { display: none; }
+  .card, .pause-card, .slot { box-shadow: none; break-inside: avoid; }
+  .chip { box-shadow: none; /* the filament colour *is* the information: keep it */
+    -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .chip.lg { box-shadow: none; }
+  .chip-empty, .chip-unknown { border-color: #666; }
+  a { text-decoration: none; }
+}

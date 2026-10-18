@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_macros.html" as ui %}
 {% block content %}
 <section class="hero">
   <h1>More colours than your AMS has slots.</h1>
@@ -9,7 +10,7 @@
 
 <div class="grid">
   <section class="card">
-    <h2><span class="step">1</span> Plan from a project</h2>
+    <h2>Plan from a project</h2>
     <p class="muted">Upload a <code>.3mf</code> project — sliced or not. You get a colour plan,
        and a reordered project that already has the filament list in the right order.
        On multi-plate projects pick the plate you are printing.</p>
@@ -30,16 +31,20 @@
   </section>
 
   <section class="card">
-    <h2><span class="step">1</span> Already sliced?</h2>
+    <h2>Already sliced?</h2>
     <p class="muted">If the file is already sliced and already in its final filament
        order, skip the reordering and go straight to the pauses.</p>
     <form action="/convert" method="post" enctype="multipart/form-data">
       <label>Sliced file (.gcode or .3mf)
         <input type="file" name="slice_file" accept=".gcode,.3mf,text/plain,application/zip" required>
       </label>
-      <label>AMS slots
-        <input type="number" name="slots" value="{{ slots }}" min="1" max="16">
-      </label>
+      {# in a .row, exactly like the left card's AMS slots: that is what keeps the
+         field as narrow as the left one and the spacing above it identical #}
+      <div class="row">
+        <label>AMS slots
+          <input type="number" name="slots" value="{{ slots }}" min="1" max="16">
+        </label>
+      </div>
       <button type="submit">Insert pauses</button>
     </form>
   </section>
@@ -48,20 +53,28 @@
 {% if jobs %}
 <section class="card">
   <h2>Recent jobs</h2>
+  <div class="table-scroll">
   <table>
-    <thead><tr><th>Job</th><th>Stage</th><th>Pauses</th><th>Swaps</th><th>Verified</th></tr></thead>
+    <thead><tr><th>Job</th><th>Stage</th><th>Pauses</th><th>Swaps</th><th>Verified</th><th class="actions-col"><span class="sr">Actions</span></th></tr></thead>
     <tbody>
     {% for j in jobs %}
       <tr>
-        <td><a href="/job/{{ j.id }}">{{ j.title }}</a></td>
+        <td><a href="/job/{{ j.id }}">{{ j.title }}{% if j.plate %} (plate {{ j.plate }}){% endif %}</a></td>
         <td>{{ j.stage }}</td>
         <td>{{ j.pauses if j.pauses is defined else '—' }}</td>
         <td>{{ j.swaps if j.swaps is defined else '—' }}</td>
         <td>{% if j.verification_ok is defined %}{{ 'yes' if j.verification_ok else 'FAILED' }}{% else %}—{% endif %}</td>
+        <td class="actions-col">{{ ui.job_actions(j) }}</td>
       </tr>
     {% endfor %}
     </tbody>
   </table>
+  </div>
+  <p class="muted small">Regenerate re-runs the stored file — useful after an update.
+     Delete removes the job and everything it wrote. Jobs are deleted automatically
+     after {{ ttl_days }} days, and they follow you by IP address or browser, so
+     another device on the same network — or this browser on another network —
+     sees the same list.</p>
 </section>
 {% endif %}
 {% endblock %}

@@ -1,5 +1,11 @@
 .git
 .gitignore
+.env
+AGENTS.md
+opencode_pause_prompt.md
+deploy
+compose.override.yaml
+strix_runs
 .venv
 venv
 __pycache__

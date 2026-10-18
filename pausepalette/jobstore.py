@@ -78,6 +78,25 @@ class JobStore:
         self.write_json(job_id, "meta.json", meta)
         return meta
 
+    def reset_meta(self, job_id: str, **fields) -> dict:
+        """Replace the meta, keeping only the job's identity and timestamps."""
+        old = self.read_json(job_id, "meta.json")
+        meta = {
+            "id": old.get("id", job_id),
+            "title": old.get("title", ""),
+            "created": old.get("created", time.time()),
+        }
+        meta.update(fields)
+        meta["updated"] = time.time()
+        self.write_json(job_id, "meta.json", meta)
+        return meta
+
+    def remove(self, job_id: str, name: str) -> None:
+        """Delete one file from a job, if it is there."""
+        p = self._dir(job_id) / name
+        if p.exists():
+            p.unlink()
+
     def meta(self, job_id: str) -> dict:
         return self.read_json(job_id, "meta.json")
 

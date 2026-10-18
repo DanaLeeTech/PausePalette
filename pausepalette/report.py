@@ -14,6 +14,25 @@ def initial_load_text(plan: Plan) -> str:
     return ", ".join(parts) if parts else "(none)"
 
 
+def format_duration(seconds: float) -> str:
+    """A print-time span in the shortest useful form: '2h 41m', '38m', '1d 4h'.
+
+    Seconds are dropped — these are estimates, and minutes is all the detail the
+    checklist needs. Anything under a minute reads '<1m'.
+    """
+    total = int(round(seconds))
+    if total < 60:
+        return "<1m"
+    minutes = total // 60
+    hours, minutes = divmod(minutes, 60)
+    days, hours = divmod(hours, 24)
+    if days:
+        return f"{days}d {hours}h"
+    if hours:
+        return f"{hours}h {minutes}m"
+    return f"{minutes}m"
+
+
 def homes(plan: Plan) -> dict[int, set[int]]:
     """position sets each colour occupies across the whole print."""
     out: dict[int, set[int]] = {}
@@ -66,8 +85,7 @@ def plan_markdown(plan: Plan) -> str:
     lines += ["## Positions", "", "| Colour | Position(s) |", "|---|---|"]
     for tool in sorted(h):
         positions = ", ".join(f"Pos{p}" for p in sorted(h[tool]))
-        stable = " (fixed)" if len(h[tool]) == 1 else ""
-        lines.append(f"| {plan.tool_name(tool)} | {positions}{stable} |")
+        lines.append(f"| {plan.tool_name(tool)} | {positions} |")
     lines.append("")
 
     if plan.warnings:
@@ -82,8 +100,14 @@ def stage2_instructions(plan: Plan, project_name: str) -> list[str]:
     order = "; ".join(f"{i + 1}. {n}" for i, n in enumerate(names))
     steps = [
         f"Open the downloaded reordered project in Bambu Studio (the file for '{project_name}').",
-        f"Set the filament list to exactly: {order}",
     ]
+    if plan.layer_orders:
+        steps.append(
+            "Don't change the filament list or the plate's filament sequence — the "
+            "plan is already set in the project."
+        )
+    else:
+        steps.append(f"Set the filament list to exactly: {order}")
     if plan.printer_model:
         steps.append(f"Confirm the printer is '{plan.printer_model}' with its AMS.")
     steps += [
@@ -117,8 +141,9 @@ def checklist_markdown(plan: Plan, project_name: str, printer_model: str | None)
         return "\n".join(lines)
 
     for p in plan.pauses:
+        left = f" - {p.remaining_text}" if p.remaining_text else ""
         lines += [
-            f"## Pause {p.index} of {len(plan.pauses)} — layer {p.layer}, before "
+            f"## Pause {p.index} of {len(plan.pauses)} — layer {p.layer}{left}, before "
             f"T{p.tool} ({plan.tool_name(p.tool)})",
             "",
         ]

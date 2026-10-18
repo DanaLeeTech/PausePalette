@@ -22,6 +22,32 @@ def _gcode_with(tool_sequence: list[int]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _gcode_with_colours(colours: list[str], tool_sequence: list[int]) -> str:
+    lines = ["; filament_colour = " + ";".join(colours)]
+    for tool in tool_sequence:
+        lines.append("; layer num/total_layer_count: 1/1")
+        lines.extend(tool_block(tool))
+    return "\n".join(lines) + "\n"
+
+
+def test_never_swapped_colour_gets_the_lowest_slot():
+    """A spool that stays put all print belongs in slot 1, 2, ... even if dark."""
+    # white, red and blue are used to the end; black is dropped after layer 1
+    # and green takes its place, so only one slot is ever touched.
+    colours = ["#FFFFFF", "#000000", "#FF0000", "#0000FF", "#00FF00"]
+    seq = [0, 1, 2, 3, 0, 2, 3, 4, 0, 2, 3, 4, 0, 2, 3, 4]
+    gf = parse_gcode(_gcode_with_colours(colours, seq))
+    plan = plan_for_gcode(gf, slots=4)
+
+    touched = {s.position for p in plan.pauses for s in p.swaps}
+    assert touched == {4}, f"only the last slot should be swapped, got {sorted(touched)}"
+    # slots 1..3 hold the colours that are never swapped (blue, red, white),
+    # and the darkest colour of all — black — is the one that gets swapped
+    assert set(plan.initial[:3]) == {0, 2, 3}
+    assert plan.initial[3] == 1
+    assert plan.colour_moves == 0
+
+
 def test_one_slot_pauses_at_every_change():
     gf = parse_gcode(keychain_gcode())
     plan = plan_for_gcode(gf, slots=1)

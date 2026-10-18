@@ -1,9 +1,13 @@
 {% extends "base.html" %}
+{% import "_macros.html" as ui %}
 {% block title %}{{ job.title }} — PausePalette{% endblock %}
 {% block content %}
 
 <section class="card">
-  <h1>{{ job.title }}</h1>
+  <div class="job-head">
+    <h1>{{ job.title }}</h1>
+    {{ ui.job_actions(job) }}
+  </div>
   <div class="stats">
     <div><span class="k">Stage</span><span class="v">{{ job.stage }}</span></div>
     <div><span class="k">Printer</span><span class="v">{{ job.printer_model or '—' }}</span></div>
@@ -13,6 +17,9 @@
     <div><span class="k">Swaps</span><span class="v">{{ job.swaps if job.swaps is defined else '—' }}</span></div>
     <div><span class="k">Position moves</span><span class="v">{{ job.moves if job.moves is defined else '—' }}</span></div>
     <div><span class="k">Plan</span><span class="v">{% if job.deferred %}deferred{% elif job.provisional %}provisional{% else %}exact{% endif %}</span></div>
+    {% if plan and plan.filament_colour %}
+    <div><span class="k">Colours</span><span class="v stats-chips">{%- for i in range(plan.filament_colour | length) %}{{ ui.chip(plan, i, 'sm') }}{% endfor -%}</span></div>
+    {% endif %}
   </div>
   {% if job.plates and job.plates | length > 1 %}
   <p class="muted">Plates in this project:
@@ -27,6 +34,23 @@
   <ol class="steps">
     {% for s in instructions %}<li>{{ s }}</li>{% endfor %}
   </ol>
+  {% if plan and plan.filament_name %}
+  <h3 class="sub">Filament list, in order</h3>
+  {{ ui.filament_order(plan) }}
+  {% endif %}
+  {% if plan and plan.first_colour_choices and plan.first_colour_choices | length > 1 %}
+  <form class="first-colour" action="/job/{{ job.id }}/first-colour" method="post">
+    <label>First colour printed
+      <select name="first_colour">
+        {% for c in plan.first_colour_choices %}
+        <option value="{{ c }}"{% if c == plan.first_colour %} selected{% endif %}>{{ plan.original_names[c - 1] if c - 1 < (plan.original_names | length) else 'T' ~ (c - 1) }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button class="btn ghost" type="submit">Regenerate plan</button>
+    <span class="muted">the plan is worked out again from that colour</span>
+  </form>
+  {% endif %}
   <div class="downloads">
     <a class="btn" href="/job/{{ job.id }}/download/reordered.3mf">Download reordered project</a>
     <a class="btn ghost" href="/job/{{ job.id }}/download/plan.md">Plan (markdown)</a>
@@ -61,7 +85,7 @@
 
 {% if plan %}
 <section class="card">
-  <h2>Colour plan</h2>
+  <h2>Colour plan{% if plan.pauses %} <span class="h2-note">{{ plan.pauses | length }} pauses · {{ plan.swaps_total }} swaps</span>{% endif %}</h2>
   {% if plan.deferred %}
   <div class="banner">
     <strong>This project was not sliced</strong>, so the pause points are not known yet.
@@ -69,29 +93,42 @@
     automatically when you upload the slice in the next step.
   </div>
   {% else %}
-  <p><strong>Initial AMS load:</strong>
-    {% for tool in plan.initial %}{% if tool is not none %}Pos{{ loop.index }} {{ plan.tool_name(tool) }}{% if not loop.last %}, {% endif %}{% endif %}{% endfor %}
-  </p>
+  <h3 class="sub">Load the AMS</h3>
+  {{ ui.slots_row(plan, plan.initial, plan.slots) }}
   {% if plan.provisional %}
-  <p class="muted">Provisional: taken from the sequence Bambu Studio stored in the
-     project. The exact pause positions are resolved from your slice in step 3.</p>
+  <p class="muted">
+    {% if plan.expected_demands %}Provisional: taken from the full sequence Bambu Studio stored in the
+     project. The exact pause positions are resolved from your slice in step 3.
+    {% else %}Provisional: worked out from the project before slicing — which filament each
+     layer prints with, so later layers are planned too. The exact pause count and positions
+     are confirmed from your slice in step 3.{% endif %}
+  </p>
+  {% endif %}
+  {% if plan.timeline | length > 1 %}
+  <h3 class="sub">How the slots evolve</h3>
+  {{ ui.timeline(plan) }}
   {% endif %}
   {% if plan.pauses %}
-  <table>
-    <thead><tr><th>#</th><th>Pause before</th><th>Layer</th><th>Swaps</th></tr></thead>
-    <tbody>
-    {% for p in plan.pauses %}
-      <tr>
-        <td>{{ p.index }}</td>
-        <td>T{{ p.tool }} {{ plan.tool_name(p.tool) }}</td>
-        <td>{% if p.layer %}{{ p.layer }}{% else %}—{% endif %}</td>
-        <td>{% for s in p.swaps %}<div>{{ s.describe() }}</div>{% endfor %}</td>
-      </tr>
-    {% endfor %}
-    </tbody>
-  </table>
+  <h3 class="sub">Pauses</h3>
+  <div class="pauses">
+    {% for p in plan.pauses %}{{ ui.pause_card(plan, p, plan.pauses | length) }}{% endfor %}
+  </div>
+  {% elif plan.provisional and not plan.expected_demands %}
+  <p class="ok">The colours used fit in the AMS — the full schedule is confirmed
+     from your slice.</p>
   {% else %}
   <p class="ok">All colours fit in the AMS — no pauses are needed.</p>
+  {% endif %}
+  {% if homes %}
+  <h3 class="sub">Positions per colour</h3>
+  <ul class="homes">
+    {% for tool in homes | sort %}
+    <li>
+      {{ ui.colour(plan, tool) }}
+      <span class="homes-pos">{{ homes[tool] | sort | join(', ') }}</span>
+    </li>
+    {% endfor %}
+  </ul>
   {% endif %}
   {% endif %}
   {% if plan.warnings %}<ul class="muted">{% for w in plan.warnings %}<li>{{ w }}</li>{% endfor %}</ul>{% endif %}
@@ -104,6 +141,7 @@
   <p class="{% if report.ok %}ok{% else %}bad{% endif %}">
     {% if report.ok %}All checks passed.{% else %}Checks failed — do not print this file.{% endif %}
   </p>
+  <div class="table-scroll">
   <table>
     <thead><tr><th>Check</th><th>Result</th><th>Detail</th></tr></thead>
     <tbody>
@@ -112,18 +150,40 @@
     {% endfor %}
     </tbody>
   </table>
+  </div>
 </section>
 
 <section class="card">
   <h2>Output</h2>
   <div class="downloads">
-    <a class="btn" href="/job/{{ job.id }}/download/output.gcode">Download {{ job.output_name }}</a>
-    <a class="btn ghost" href="/job/{{ job.id }}/download/checklist.md">Swap checklist</a>
+    {% if job.has_output_3mf %}
+    <a class="btn" href="/job/{{ job.id }}/download/output.3mf">Download {{ job.output_name }}.3mf</a>
+    {% endif %}
+    <a class="btn{% if job.has_output_3mf %} ghost{% endif %}" href="/job/{{ job.id }}/download/output.gcode">Download {{ job.output_name }}</a>
+    <a class="btn ghost" href="/job/{{ job.id }}/download/checklist.md">Swap checklist (print)</a>
   </div>
+  <p class="muted">
+    {% if job.has_output_3mf %}The .3mf is the sliced file you uploaded with the pauses put in —
+    open it in Bambu Studio and print it from there. {% endif %}The .gcode is for printing from
+    a file.
+  </p>
+  <div class="banner print-note">
+    Never re-slice this file. The technique is validated, but skim
+    the pauses below before you start.
+  </div>
+  {% if plan and plan.pauses %}
+  <h3 class="sub">Before you start — load the AMS</h3>
+  {{ ui.slots_row(plan, plan.initial, plan.slots) }}
+  <h3 class="sub">Swap checklist <span class="h2-note">tick them off as you go</span></h3>
+  <div class="pauses">
+    {% for p in plan.pauses %}{{ ui.pause_card(plan, p, plan.pauses | length, true) }}{% endfor %}
+  </div>
+  {% else %}
   <details open>
     <summary>Swap checklist</summary>
     <pre class="checklist">{{ checklist }}</pre>
   </details>
+  {% endif %}
 </section>
 {% endif %}
 

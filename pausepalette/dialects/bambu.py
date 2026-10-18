@@ -1,10 +1,17 @@
 """Bambu Studio / OrcaSlicer AMS dialect.
 
 Implements the validated manual spool-swap technique: pause immediately before
-a tool-change block, cut and retract via ``T255`` (the same sequence the printer
-uses at the end of a print), wait for the user with ``M400 U1``, then continue
-into the tool-change block with its unload and re-feed steps disabled because
-the filament was already unloaded at the pause.
+a tool-change block, unload the old filament back to the AMS, wait for the user
+with ``M400 U1``, then continue into the tool-change block with its unload and
+re-feed steps disabled because the filament was already unloaded at the pause.
+
+The unload itself is the *printer's own*: every Bambu model ends a print by
+pulling the filament back to the AMS, and that sequence differs per model — the
+A1 cuts at X267, the X1/P1 park at X20 Y50 and wipe at X100, the newer
+A2L/H2D/H2S/P2S/X2D unload with the ``T65535`` pseudo-tool. Those sequences are
+vendored in :mod:`bambu_models` straight from Bambu Studio's printer profiles
+and picked by the model named in the sliced file, so the pause moves are the
+ones that machine actually uses.
 """
 
 from __future__ import annotations
@@ -13,6 +20,7 @@ import re
 
 from ..errors import StopAndExplain
 from ..model import Pause, ToolChange
+from .bambu_models import BAMBU_UNLOAD, unload_for
 
 RE_UNLOAD = re.compile(r"^\s*M620\.11 S1 I\d+ E-\d")
 RE_FEED = re.compile(r"^\s*M620\.11 S1 I\d+ E\d")
@@ -28,6 +36,9 @@ RE_REFED_TAIL = [
 
 DISABLED_LINE = "M620.11 S0 ; filament already unloaded at pause"
 
+#: the printer whose unload we fall back to when the file names an unknown one
+FALLBACK_MODEL = "A1"
+
 
 def _indent(line: str) -> str:
     return line[: len(line) - len(line.lstrip())]
@@ -40,15 +51,19 @@ def build_pause_block(
     z: str,
     feed: str,
     temp: int | None,
+    printer_model: str | None = None,
 ) -> list[str]:
-    """Return the pause block lines (each with its line ending)."""
-    swap_lines = [f"; swap: {s.describe()}" for s in pause.swaps]
+    """Return the pause block lines (each with its line ending).
+
+    ``printer_model`` selects the unload sequence; an unknown model falls back
+    to the A1's and the caller should warn.
+    """
+    unload = unload_for(printer_model) or BAMBU_UNLOAD[FALLBACK_MODEL]
+
     body = [
-        f"; ===== MANUAL SPOOL SWAP {pause.index} of {total} =====",
-        *swap_lines,
         "M1007 S0 ; turn off mass estimation",
         "G392 S0",
-        "M620 S255",
+        unload[0],
         "M204 S9000",
         f"G1 Z{z} F{feed}",
         "M400",
@@ -56,17 +71,29 @@ def build_pause_block(
         "M106 P2 S0",
         f"M104 S{temp if temp is not None else ''}".rstrip(),
         "",
-        "G1 X267 F18000 ; cutter position, same as automatic colour change",
-        "M400",
-        "T255 ; cut and retract filament back to AMS, same as end of print",
-        "G1 X-28.5 F18000",
-        "G1 X-48.2 F3000",
-        "M621 S255",
+        *unload[1:],
         "M400",
         "M400 U1 ; PAUSE: swap spools now, then resume",
+    ]
+    lines = [
+        f"; ===== MANUAL SPOOL SWAP {pause.index} of {total} =====",
+        *[f"; swap: {s.describe()}" for s in pause.swaps],
+        *body,
         f"; ===== END MANUAL SPOOL SWAP {pause.index} =====",
     ]
-    return [line + newline for line in body]
+    return [line + newline for line in lines]
+
+
+def unload_marker(printer_model: str | None) -> str:
+    """The pseudo-tool the unload uses: ``T255``, ``T65535``, ... .
+
+    Used to verify that a pause block really unloads, per printer.
+    """
+    unload = unload_for(printer_model) or BAMBU_UNLOAD[FALLBACK_MODEL]
+    for line in unload:
+        if line.startswith("T") and line[1:].split()[0].isdigit():
+            return line.split()[0]
+    return "T255"  # pragma: no cover - every vendored entry has one
 
 
 def transform_following_block(

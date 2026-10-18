@@ -74,6 +74,7 @@ def keychain_gcode(remap: dict[int, int] | None = None, filaments: list[str] | N
         "; BambuStudio 02.01.00.00",
         "; printer_model = Bambu Lab A1",
         f"; total layer number: {TOTAL_LAYERS}",
+        "; model printing time: 38m 5s; total estimated time: 38m 12s",
         "; filament_colour = " + ";".join(filaments),
         f"; total_filament = {len(filaments)}",
         "; HEADER_BLOCK_END",
