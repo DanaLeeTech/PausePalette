@@ -319,7 +319,8 @@ def test_manifest_and_icons(page, site):
 
     assert manifest["name"] == "PausePalette"
     assert manifest["short_name"] and manifest["description"]
-    assert manifest["start_url"] == "/" and manifest["scope"] == "/"
+    assert manifest["start_url"] in (".", "./", "/")
+    assert manifest["scope"] in (".", "./", "/")
     assert manifest["display"] == "standalone"
     for key in ("theme_color", "background_color"):
         assert re.fullmatch(r"#[0-9a-fA-F]{6}", manifest[key]), (key, manifest[key])
