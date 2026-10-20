@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PausePalette</title>
+  <link rel="canonical" href="./">
+  <meta name="description" content="Offline colour planner and manual spool-swap pause inserter for Bambu / Orca AMS prints.">
+  <meta property="og:site_name" content="PausePalette">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="PausePalette">
+  <meta property="og:description" content="Offline colour planner and manual spool-swap pause inserter for Bambu / Orca AMS prints.">
+  <meta property="og:url" content="./">
+  <meta property="og:image" content="logo.png">
+  <meta name="twitter:card" content="summary">
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+  <link rel="apple-touch-icon" href="icon-180.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#fcfcfc" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#121212" media="(prefers-color-scheme: dark)">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="PausePalette">
+  <script>
+    // pick the theme before first paint: stored choice, else the system's
+    (function () {
+      try {
+        var stored = localStorage.getItem("pp-theme");
+        var dark = stored ? stored === "dark"
+          : window.matchMedia("(prefers-color-scheme: dark)").matches;
+        if (dark) document.documentElement.classList.add("dark");
+      } catch (e) {}
+    })();
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css?v=1">
+  <script>
+    // no server to ask: the page's own address is the canonical one
+    (function () {
+      var url = location.href.split("#")[0];
+      document.querySelector('link[rel=canonical]').href = url;
+      document.querySelector('meta[property="og:url"]').content = url;
+      document.querySelector('meta[property="og:image"]').content = new URL("logo.png", url).href;
+    })();
+  </script>
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="./">
+      <img class="logo" src="logo.png" alt="" width="38" height="38">
+      <span class="brand-name">PausePalette</span>
+    </a>
+    <button class="icon-btn theme-toggle" id="themeToggle" type="button"
+            title="Toggle dark mode" aria-label="Toggle dark mode">
+      <svg class="icon icon-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 7a7 7 0 0 0 12 4.9v.1c0 5.523-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2h.1A6.979 6.979 0 0 0 10 7zm-6 5a8 8 0 0 0 15.062 3.762A9 9 0 0 1 8.238 4.938 7.999 7.999 0 0 0 4 12z"/></svg>
+      <svg class="icon icon-sun" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 18a6 6 0 1 1 0-12 6 6 0 0 1 0 12zm0-2a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM11 1h2v3h-2V1zm0 19h2v3h-2v-3zM3.515 4.929l1.414-1.414L7.05 5.636 5.636 7.05 3.515 4.93zM16.95 18.364l1.414-1.414 2.121 2.121-1.414 1.414-2.121-2.121zm2.121-14.435l1.414 1.414-2.121 2.121-1.414-1.414 2.121-2.121zM5.636 16.95l1.414 1.414-2.121 2.121-1.414-1.414 2.121-2.121zM23 11v2h-3v-2h3zM4 11v2H1v-2h3z"/></svg>
+    </button>
+  </header>
+  <main>
+    <div id="error"></div>
+
+    <section class="hero">
+      <h1>More colours than your AMS has slots.</h1>
+      <p>PausePalette works out which spool goes in which position when, writes the
+         reordered project for you, then inserts the validated manual-swap pauses into
+         the slice. It never slices and never talks to your printer.</p>
+    </section>
+
+    <div class="grid">
+      <section class="card">
+        <h2>Plan from a project</h2>
+        <p class="muted">Upload a <code>.3mf</code> project — sliced or not. You get a colour plan,
+           and a reordered project that already has the filament list in the right order.
+           On multi-plate projects pick the plate you are printing.</p>
+        <form id="planForm" data-action="plan">
+          <div class="field">
+            <span class="field-label">Project file (.3mf)</span>
+            <div class="file-row">
+              <button class="btn ghost" type="button" data-pick>Choose file</button>
+              <span class="muted file-name">no file chosen</span>
+            </div>
+            <input class="sr" type="file" accept=".3mf,application/zip" tabindex="-1" aria-hidden="true">
+          </div>
+          <div class="row">
+            <label>AMS slots
+              <input type="number" name="slots" value="4" min="1" max="16">
+            </label>
+            <label>Plate
+              <input type="number" name="plate" value="1" min="1" max="16">
+            </label>
+          </div>
+          <button type="submit">Plan &amp; reorder</button>
+        </form>
+      </section>
+
+      <section class="card">
+        <h2>Already sliced?</h2>
+        <p class="muted">If the file is already sliced and already in its final filament
+           order, skip the reordering and go straight to the pauses.</p>
+        <form id="convertForm" data-action="convert">
+          <div class="field">
+            <span class="field-label">Sliced file (.gcode or .3mf)</span>
+            <div class="file-row">
+              <button class="btn ghost" type="button" data-pick>Choose file</button>
+              <span class="muted file-name">no file chosen</span>
+            </div>
+            <input class="sr" type="file" accept=".gcode,.3mf,text/plain,application/zip" tabindex="-1" aria-hidden="true">
+          </div>
+          <div class="row">
+            <label>AMS slots
+              <input type="number" name="slots" value="4" min="1" max="16">
+            </label>
+          </div>
+          <button type="submit">Insert pauses</button>
+        </form>
+      </section>
+    </div>
+
+    <section class="card" id="jobs" hidden>
+      <h2>Recent jobs</h2>
+      <div class="table-scroll">
+      <table>
+        <thead><tr><th>Job</th><th>Stage</th><th>Pauses</th><th>Swaps</th><th>Verified</th><th class="actions-col"><span class="sr">Actions</span></th></tr></thead>
+        <tbody></tbody>
+      </table>
+      </div>
+      <p class="muted small">Jobs are stored in this browser until you delete them.
+         Regenerate re-runs the stored file — useful after an update.</p>
+      <p><button class="btn ghost" type="button" id="clearAll">Clear all jobs</button></p>
+    </section>
+
+    <p class="muted small" id="boot">Starting the local engine — the first load downloads
+       about 10&nbsp;MB and takes a few seconds.</p>
+  </main>
+  <script>
+    (function () {
+      var btn = document.getElementById("themeToggle");
+      if (!btn) return;
+      btn.setAttribute("aria-pressed",
+        String(document.documentElement.classList.contains("dark")));
+      btn.addEventListener("click", function () {
+        var dark = document.documentElement.classList.toggle("dark");
+        try { localStorage.setItem("pp-theme", dark ? "dark" : "light"); } catch (e) {}
+        btn.setAttribute("aria-pressed", String(dark));
+      });
+    })();
+  </script>
+  <script src="render.js"></script>
+  <script src="fs.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

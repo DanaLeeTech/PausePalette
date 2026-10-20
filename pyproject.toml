@@ -12,8 +12,7 @@ license = { text = "MIT" }
 dependencies = []
 
 [project.optional-dependencies]
-web = ["fastapi>=0.110", "uvicorn[standard]>=0.29", "jinja2>=3.1", "python-multipart>=0.0.9"]
-dev = ["pytest>=8", "httpx>=0.27"]
+dev = ["pytest>=8", "pytest-playwright>=0.5", "pillow>=10"]
 
 [project.scripts]
 pausepalette = "pausepalette.cli:main"

@@ -145,8 +145,8 @@ main a:not(.btn):not(.brand):hover {
 .grid > .card > h2 { margin-bottom: 14px; }
 .grid > .card > p { margin-bottom: 14px; }
 /* The blurb already supplies the gap above the first field, and the row gap
-   supplies the one below it, so the first label adds nothing of its own. */
-.grid > .card form > label:first-child { margin: 0; }
+   supplies the one below it, so the first field adds nothing of its own. */
+.grid > .card form > .field:first-child { margin: 0; }
 @media (max-width: 780px) {
   .grid { grid-template-columns: 1fr; grid-template-rows: none; }
   .grid > .card { display: block; }
@@ -179,6 +179,13 @@ main a:not(.btn):not(.brand):hover {
 label { display: block; margin: 14px 0; color: hsl(var(--muted-foreground)); font-size: 13.5px; }
 .row { display: flex; gap: 20px; }
 .row label { flex: 0 0 auto; }
+
+/* A file pick is a button plus the chosen name: the same control serves the
+   File System Access picker and the hidden fallback input underneath it. */
+.field { margin: 14px 0; color: hsl(var(--muted-foreground)); font-size: 13.5px; }
+.field > .field-label { display: block; margin-bottom: 8px; }
+.file-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.file-name { font-size: 13px; word-break: break-all; }
 input[type=file], input[type=number] {
   display: block; width: 100%; margin-top: 8px; padding: 10px 12px;
   background: hsl(var(--card)); color: hsl(var(--foreground));

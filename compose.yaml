@@ -1,35 +1,31 @@
 services:
-  pausepalette:
+  # The static GUI: http://localhost:8000
+  web:
     build: .
     image: pausepalette:0.1.0
     ports:
-      - "8000:8000"
-    environment:
-      PAUSEPALETTE_DATA: /data/jobs
-      # The public address your instance is served at, if any. It is what the
-      # pages put in their canonical link and in link previews. Set it in
-      # ".env" (see example.env); blank means "reachable over localhost only".
-      PAUSEPALETTE_PUBLIC_URL: "${PAUSEPALETTE_PUBLIC_URL:-}"
-    # The job store is plain files in ./data, not a Docker volume. That means a
-    # rebuild, a re-clone, a project rename or `docker compose down -v` cannot
-    # clear it, and you can move or back it up with plain cp/tar. It is listed in
-    # .gitignore and .dockerignore. To migrate an old named volume:
-    #
-    #   docker run --rm -v pausepalette_pausepalette-data:/from:ro \
-    #     -v "$PWD/data:/to" alpine sh -c \
-    #     'cp -a /from/. /to/ && chown -R '"$(id -u)"':'"$(id -g)"' /to'
-    #
-    user: "${PAUSEPALETTE_UID:-1000}:${PAUSEPALETTE_GID:-1000}"
-    volumes:
-      - ./data:/data
+      - "${PAUSEPALETTE_PORT:-8000}:8000"
+    restart: unless-stopped
     healthcheck:
       test:
         - CMD
         - python
         - -c
-        - "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=4).status == 200 else 1)"
+        - "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/', timeout=4).status == 200 else 1)"
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 5s
-    restart: unless-stopped
+
+  # The CLI: docker compose run --rm cli plan Foo.3mf --slots 4 -o Foo_pausepalette.3mf
+  cli:
+    build: .
+    image: pausepalette:0.1.0
+    profiles: ["cli"]
+    entrypoint: pausepalette
+    working_dir: /work
+    volumes:
+      # the folder you run it from, so it reads and writes your files directly
+      - "${PWD:-.}:/work"
+    # your own uid/gid, so files the CLI writes in the folder are yours
+    user: "${PAUSEPALETTE_UID:-1000}:${PAUSEPALETTE_GID:-1000}"
