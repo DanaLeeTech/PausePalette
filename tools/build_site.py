@@ -3,8 +3,8 @@
 
     python tools/build_site.py [outdir] [--dev]     # default: ./dist
 
-A publish build is exactly what GitHub Pages serves: the app, the core and
-CNAME. --dev adds the worker selftest and samples/ so the end-to-end tests have
+A publish build is exactly what GitHub Pages serves: the app and the core.
+--dev adds the worker selftest and samples/ so the end-to-end tests have
 fixtures; neither ever reaches the published site.
 
 Deterministic: the same files, byte for byte, every run. Page caching is the
@@ -41,8 +41,6 @@ DEV = [
     "selftest.js",
     "expected.json",
 ]
-CNAME = "pausepalette.dlee.app"
-
 
 def main():
     parser = argparse.ArgumentParser(description="build the static PWA")
@@ -68,8 +66,6 @@ def main():
         # selftest fixtures; absent in a fresh clone, so the dev build is not gated on them
         if (ROOT / "samples").is_dir():
             shutil.copytree(ROOT / "samples", out / "samples")
-    else:
-        (out / "CNAME").write_text(CNAME + "\n")
     print(f"built {out}" + (" (dev)" if args.dev else ""))
 
 

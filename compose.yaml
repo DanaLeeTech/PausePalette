@@ -2,9 +2,12 @@ services:
   # The static GUI: http://localhost:8000
   web:
     build: .
-    image: pausepalette:0.1.0
+    image: ghcr.io/danaleetech/pausepalette:latest
+    # `.env` PAUSELETTE_UI=0 leaves the GUI out (command-line-only setup)
+    deploy:
+      replicas: ${PAUSELETTE_UI:-1}
     ports:
-      - "${PAUSEPALETTE_PORT:-8000}:8000"
+      - "${PAUSELETTE_PORT:-8000}:8000"
     restart: unless-stopped
     healthcheck:
       test:
@@ -20,7 +23,7 @@ services:
   # The CLI: docker compose run --rm cli plan Foo.3mf --slots 4 -o Foo_pausepalette.3mf
   cli:
     build: .
-    image: pausepalette:0.1.0
+    image: ghcr.io/danaleetech/pausepalette:latest
     profiles: ["cli"]
     entrypoint: pausepalette
     working_dir: /work
@@ -28,4 +31,4 @@ services:
       # the folder you run it from, so it reads and writes your files directly
       - "${PWD:-.}:/work"
     # your own uid/gid, so files the CLI writes in the folder are yours
-    user: "${PAUSEPALETTE_UID:-1000}:${PAUSEPALETTE_GID:-1000}"
+    user: "${PAUSELETTE_UID:-1000}:${PAUSELETTE_GID:-1000}"

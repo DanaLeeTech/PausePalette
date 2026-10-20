@@ -2,7 +2,7 @@
 
 **Print in more colours than your AMS has slots.**
 
-Try it at **<https://pausepalette.dlee.app>** — nothing to install, and your files
+Try it at **<https://danaleetech.github.io/PausePalette/>** — nothing to install, and your files
 stay on your computer.
 
 Your AMS (the box that feeds filament to a Bambu printer) holds a handful of
@@ -111,19 +111,32 @@ guessing.
 
 ## Run your own copy (Docker)
 
-The image holds the same static site plus the command line, and needs no volumes,
-no database and no environment variables:
+One image holds both the static site and the command line. The easiest way is
+the published image — no clone, no build:
+
+```sh
+docker run --rm -p 8000:8000 ghcr.io/danaleetech/pausepalette:latest
+```
+
+Then open **http://localhost:8000**. The browser still does all the work — the
+container only hands out the files — so a copy on a server is just as private as
+the hosted one.
+
+Or clone it and use compose, which adds the `cli` service and an `.env` file:
 
 ```sh
 git clone https://github.com/DanaLeeTech/PausePalette.git
 cd PausePalette
+cp example.env .env        # optional: port, uid/gid, and UI on/off
 docker compose up -d --build
 ```
 
-Then open **http://localhost:8000**. `docker compose logs -f` follows the logs
-and `docker compose down` stops it. The browser still does all the work — the
-container only hands out the files — so a copy on a server is just as private as
-the hosted one.
+`docker compose logs -f` follows the logs and `docker compose down` stops it.
+`example.env` is documented in place; the switch worth knowing is
+**`PAUSELETTE_UI`**: `0` starts nothing with `docker compose up`, for a
+command-line-only setup. (The CLI is a one-shot command, not a running service,
+so there is nothing to switch off — `docker compose run --rm cli …` works either
+way.)
 
 ## Command line
 
@@ -152,6 +165,13 @@ if you cloned PausePalette elsewhere):
 
 ```sh
 alias pausepalette='docker compose -f ~/PausePalette/compose.yaml run --rm cli'
+```
+
+Without a clone, call the published image directly — same result:
+
+```sh
+docker run --rm -v "$PWD:/work" -w /work --entrypoint pausepalette \
+  ghcr.io/danaleetech/pausepalette:latest plan Keychain.3mf --slots 4
 ```
 
 ## For developers
