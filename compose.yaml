@@ -3,11 +3,11 @@ services:
   web:
     build: .
     image: ghcr.io/danaleetech/pausepalette:latest
-    # `.env` PAUSELETTE_UI=0 leaves the GUI out (command-line-only setup)
+    # `.env` PAUSEPALETTE_UI=0 leaves the GUI out (command-line-only setup)
     deploy:
-      replicas: ${PAUSELETTE_UI:-1}
+      replicas: ${PAUSEPALETTE_UI:-1}
     ports:
-      - "${PAUSELETTE_PORT:-8000}:8000"
+      - "${PAUSEPALETTE_PORT:-8000}:8000"
     restart: unless-stopped
     healthcheck:
       test:
@@ -31,4 +31,4 @@ services:
       # the folder you run it from, so it reads and writes your files directly
       - "${PWD:-.}:/work"
     # your own uid/gid, so files the CLI writes in the folder are yours
-    user: "${PAUSELETTE_UID:-1000}:${PAUSELETTE_GID:-1000}"
+    user: "${PAUSEPALETTE_UID:-1000}:${PAUSEPALETTE_GID:-1000}"

@@ -133,7 +133,7 @@ docker compose up -d --build
 
 `docker compose logs -f` follows the logs and `docker compose down` stops it.
 `example.env` is documented in place; the switch worth knowing is
-**`PAUSELETTE_UI`**: `0` starts nothing with `docker compose up`, for a
+**`PAUSEPALETTE_UI`**: `0` starts nothing with `docker compose up`, for a
 command-line-only setup. (The CLI is a one-shot command, not a running service,
 so there is nothing to switch off — `docker compose run --rm cli …` works either
 way.)
