@@ -406,7 +406,6 @@ function wireSliceForm() {
     const transfer = [chosen.bytes];
     chosen = null; // the worker owns the bytes from here
     input.value = "";
-    name.textContent = "extracted to PWA memory, original reference disposed";
     showError("");
     busy(submit, true, "Working…");
     try {

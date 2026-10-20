@@ -361,8 +361,11 @@ def test_service_worker_controls_page_and_precaches_the_app(page, site):
     assert page.evaluate("!!navigator.serviceWorker.controller")
 
     caches = cache_contents(page)
-    assert list(caches) == ["pausepalette-v1"], list(caches)
-    entries = set(caches["pausepalette-v1"])
+    version = re.search(
+        r'const VERSION = "([^"]+)"', (ROOT / "web" / "sw.js").read_text()
+    ).group(1)
+    assert list(caches) == [f"pausepalette-{version}"], list(caches)
+    entries = set(caches[f"pausepalette-{version}"])
     # the browser keeps sw.js itself; everything else the app loads is in there
     shell = {f"{site}/{name}" for name in ("index.html", "job.html", "worker.js")}
     shell.add(f"{site}/manifest.webmanifest")
