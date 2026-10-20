@@ -88,7 +88,7 @@ async function refreshJobs() {
     .map(
       (job) => `<tr>
         <td><a href="job.html?job=${encodeURIComponent(job.id)}">${PP.esc(job.title)}${job.plate ? ` (plate ${PP.esc(job.plate)})` : ""}</a></td>
-        <td>${PP.esc(job.stage)}</td>
+        <td>${PP.esc(PP.ui.stageLabel(job.stage))}</td>
         <td>${has(job.pauses) ? PP.esc(job.pauses) : "—"}</td>
         <td>${has(job.swaps) ? PP.esc(job.swaps) : "—"}</td>
         <td>${job.verification_ok === undefined ? "—" : job.verification_ok ? "yes" : "FAILED"}</td>

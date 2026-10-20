@@ -197,7 +197,8 @@ function rpc() {
     entry.reject(error);
   });
   worker.addEventListener("error", (event) => {
-    const error = new Error(event.message || "the local engine failed to start");
+    console.error(event.message);
+    const error = new Error("PausePalette could not start in this browser. Reload the page and try again.");
     for (const entry of pending.values()) entry.reject(error);
     pending.clear();
   });
@@ -215,4 +216,6 @@ function rpc() {
 
 PP.esc = esc;
 PP.rpc = rpc;
-PP.ui = { chip, colour, slot, slotsRow, timeline, pauseCard, filamentOrder, jobActions };
+const STAGE_LABEL = { created: "new", planned: "plan ready", converted: "pauses added" };
+const stageLabel = (stage) => STAGE_LABEL[stage] || stage;
+PP.ui = { chip, colour, slot, slotsRow, timeline, pauseCard, filamentOrder, jobActions, stageLabel };

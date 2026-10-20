@@ -43,7 +43,7 @@ async function openFile(input, accept) {
       return await describe(await handle.getFile(), true);
     } catch (err) {
       if (err.name === "AbortError") return null;
-      throw err;
+      throw new Error("That file could not be opened. Try again.");
     }
   }
   // The page's hidden input opens the browser's own dialog. A cancelled dialog
@@ -77,7 +77,7 @@ async function saveFile(name, mime, buffer) {
       return "fs-access";
     } catch (err) {
       if (err.name === "AbortError") return "cancelled";
-      throw err;
+      throw new Error("That file could not be saved. Try again.");
     }
   }
   const url = URL.createObjectURL(new Blob([buffer], { type: mime || "application/octet-stream" }));

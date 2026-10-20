@@ -347,7 +347,7 @@ async function boot() {
   } catch (err) {
     // no CDN, no engine: say so in words the page can show, not a worker trace
     throw new Error(
-      "The local engine could not be downloaded. Check your connection, then reload the page.",
+      "PausePalette could not be downloaded. Check your connection, then reload the page.",
     );
   }
   const engineMs = now() - t0;
@@ -359,7 +359,7 @@ async function boot() {
   const files = [];
   for (const path of CORE_FILES) {
     const res = await fetch(CORE_BASE + path);
-    if (!res.ok) throw new Error(`fetch ${path}: HTTP ${res.status}`);
+    if (!res.ok) throw new Error("Part of the app could not be loaded. Reload the page.");
     const bytes = new Uint8Array(await res.arrayBuffer());
     pyodide.FS.writeFile("/" + path, bytes);
     files.push({ path: path, bytes: bytes.length });
@@ -466,14 +466,14 @@ async function save(job) {
     await store.put(job);
   } catch (err) {
     throw new UserError(
-      `the job could not be saved in this browser's storage (${err && err.name ? err.name : err})`
+      "This job could not be saved because this browser's storage is full. Delete an old job and try again."
     );
   }
 }
 
 async function requireMeta(jobId) {
   const meta = await store.getMeta(String(jobId || ""));
-  if (!meta) throw new UserError(`no such job: ${jobId}`);
+  if (!meta) throw new UserError("This job is no longer in this browser.");
   return meta;
 }
 
@@ -721,7 +721,7 @@ async function sliceJob(msg) {
   const file = requireFile(msg, filename);
   const stored = await requireMeta(jobId);
   const planFile = await store.getFile(jobId, "plan.json");
-  if (!planFile) throw new UserError(`no such job: ${jobId}`);
+  if (!planFile) throw new UserError("This job is no longer in this browser.");
 
   const timings = {};
   const tIngest = now();
@@ -786,7 +786,7 @@ async function regenerateJob(msg) {
   } else if (sliceGcode) {
     done = await runConvert(meta, name, sliceGcode.value, slots, none(meta.plate));
   } else {
-    throw new UserError("this job has no stored input left to re-plan from");
+    throw new UserError("This job no longer has its original file, so it cannot be regenerated.");
   }
   return { ok: true, jobId: jobId, job: done.meta, page: await buildPage(done.meta), timings: done.timings };
 }
@@ -796,7 +796,7 @@ async function firstColourJob(msg) {
   const meta = await requireMeta(jobId);
   const colour = intOr(msg.colour, 0);
   const project = await store.getFile(jobId, "project.3mf");
-  if (!project) throw new UserError("this job has no stored project to re-plan");
+  if (!project) throw new UserError("This job no longer has its original project, so it cannot be regenerated.");
   const choices = meta.first_colour_choices || [];
   if (choices.length && !choices.includes(colour)) {
     throw new UserError("that colour is not one of the first layer's colours");
@@ -846,9 +846,9 @@ async function clearJobs() {
 async function readBuffer(msg) {
   const jobId = String(msg.jobId || "");
   const name = String(msg.name || "");
-  if (!DOWNLOAD_WHITELIST.has(name)) throw new UserError("not allowed");
+  if (!DOWNLOAD_WHITELIST.has(name)) throw new UserError("That file is no longer available in this job.");
   const rec = await store.getFile(jobId, name);
-  if (!rec) throw new UserError("not found");
+  if (!rec) throw new UserError("That file is no longer available in this job.");
   const meta = (await store.getMeta(jobId)) || {};
 
   // the file names a finished job hands the user

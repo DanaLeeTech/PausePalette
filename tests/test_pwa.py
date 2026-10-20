@@ -281,7 +281,7 @@ def test_slice_that_does_not_match_is_refused(page, site):
     message = page.inner_text("#error .banner.error")
     assert "does not match the plan" in message
     assert page.locator("#content .pause-card").count() == 6
-    assert page.locator(".stats .v").first.inner_text() == "planned"
+    assert page.locator(".stats .v").first.inner_text() == "plan ready"
 
     SCREENS.mkdir(exist_ok=True)
     page.screenshot(path=str(SCREENS / "step3-refusal.png"), full_page=True)

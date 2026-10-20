@@ -34,7 +34,7 @@ function has(value) {
 function statsRow(job, plan) {
   const value = (item) => (has(item) ? PP.esc(item) : "—");
   const stats = [
-    ["Stage", value(job.stage)],
+    ["Stage", value(PP.ui.stageLabel(job.stage))],
     ["Printer", value(job.printer_model)],
     ["Slots", value(job.slots)],
     ["Plate", value(job.plate)],

@@ -99,8 +99,8 @@ after an update) and a **Delete** button.
   model's shape, or simply reorders and leaves the exact plan for stage 3.
 - Multi-plate projects are supported; pick the plate you're printing (plate 1 by
   default).
-- A single file up to 400 MB; the first page load downloads about 10 MB of
-  engine and takes a few seconds.
+- A single file up to 400 MB; the first visit downloads about 10 MB and
+  takes a few seconds.
 
 And PausePalette won't write anything it isn't sure about: before stage 3 it checks
 the slice matches the plan (printer model, filament order, tool changes and
