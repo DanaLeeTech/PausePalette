@@ -480,17 +480,6 @@ def _reference_values(text: str) -> list[int]:
     ]
 
 
-def _reference_base(values: list[int]) -> int:
-    """Whether a file's filament references are 1-based (1..n) or 0-based (0..n-1).
-
-    Bambu Studio and OrcaSlicer write 1-based references, so that is the default.
-    A ``0`` can only be a 0-based reference, which pins the convention for the
-    whole file: reading a 1-based value as 0-based (or the reverse) shifts every
-    reference by one tool and silently recolours the model.
-    """
-    return 0 if 0 in values else 1
-
-
 def _remap_references(
     text: str,
     name: str,
@@ -499,30 +488,25 @@ def _remap_references(
 ) -> str:
     """Rewrite every filament-index metadata value from the old order to the new.
 
-    The file's own numbering decides the base, so a build that writes 0-based
-    references is remapped as faithfully as a 1-based one.
+    Bambu Studio and OrcaSlicer number these references 1-based, with ``0``
+    meaning "default filament" (negative parts and other modifiers). A 0 is not
+    a filament and stays as it is: reading the rest as 0-based would shift every
+    reference by one tool and silently recolour the model.
     """
-    values = _reference_values(text)
-    if not values:
-        return text
-    base = _reference_base(values)
-    if base == 0 and any(v > len(old_to_new) - 1 for v in values):
-        report.warnings.append(
-            f"{name}: filament references mix 0- and 1-based values; read them as "
-            f"0-based — check the artwork after opening the project"
-        )
 
     def _sub(m: re.Match) -> str:
         key = m.group("key")
         if not REF_KEY_RE.match(key):
             return m.group(0)
         value = int(m.group("value"))
-        old = value - base
+        if value == 0:  # the slicer's "default" marker, not a filament
+            return m.group(0)
+        old = value - 1
         if old not in old_to_new:
             report.warnings.append(f"{name}: reference {value} out of range, left as-is")
             return m.group(0)
         report.references_remapped += 1
-        return f"{m.group('pre')}{old_to_new[old] + base}{m.group('post')}"
+        return f"{m.group('pre')}{old_to_new[old] + 1}{m.group('post')}"
 
     return REF_TAG_RE.sub(_sub, text)
 

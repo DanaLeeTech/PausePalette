@@ -92,15 +92,24 @@ def _plate_block(
     )
 
 
-def model_settings(with_sequences: bool = True, ref_base: int = 1) -> str:
-    """Project model settings; ``ref_base`` picks 1-based (Bambu) or 0-based refs."""
+def model_settings(with_sequences: bool = True, default_refs: bool = False) -> str:
+    """Project model settings; ``default_refs`` adds a part on the default filament."""
     parts = []
     for i in range(len(FILAMENTS)):
         parts.append(
             f"""    <part id="{i + 1}" subtype="normal_part">
       <metadata key="name" value="part{i + 1}"/>
-      <metadata key="filament_id" value="{i + ref_base}"/>
-      <metadata key="extruder" value="{i + ref_base}"/>
+      <metadata key="filament_id" value="{i + 1}"/>
+      <metadata key="extruder" value="{i + 1}"/>
+    </part>"""
+        )
+    if default_refs:
+        # Bambu writes 0 for "default filament": negative parts and modifiers
+        parts.append(
+            """    <part id="99" subtype="negative_part">
+      <metadata key="name" value="Merged Parts"/>
+      <metadata key="filament_id" value="0"/>
+      <metadata key="extruder" value="0"/>
     </part>"""
         )
     plate = _plate_block(gcode=True) if with_sequences else ""
@@ -218,7 +227,7 @@ def build_3mf(
     gcode: str | None = None,
     sliced: bool = True,
     sequence_json: bool = False,
-    ref_base: int = 1,
+    default_refs: bool = False,
     with_sequences: bool = True,
 ) -> bytes:
     gcode = gcode if gcode is not None else keychain_gcode()
@@ -229,7 +238,7 @@ def build_3mf(
         z.writestr("3D/3dmodel.model", MODEL)
         z.writestr("Metadata/project_settings.config", json.dumps(project_settings(), indent=4))
         z.writestr("Metadata/model_settings.config",
-                   model_settings(with_sequences=with_sequences, ref_base=ref_base))
+                   model_settings(with_sequences=with_sequences, default_refs=default_refs))
         z.writestr("Metadata/plate_1.json", "[]")
         z.writestr("Metadata/slice_info.config", "<config/>")
         if sliced:

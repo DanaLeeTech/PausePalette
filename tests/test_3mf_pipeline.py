@@ -24,7 +24,7 @@ from tests.fixtures import FILAMENTS, keychain_gcode  # noqa: E402
 from tests.make_3mf import build_3mf, geometry_3mf, project_settings  # noqa: E402
 
 
-def _part_colours(data: bytes, base: int = 1) -> dict[str, str]:
+def _part_colours(data: bytes) -> dict[str, str]:
     """part id -> the colour hex it prints with (via its own filament ref)."""
     entries = threemf._read_zip(data)
     colours = json.loads(entries["Metadata/project_settings.config"])["filament_colour"]
@@ -32,8 +32,8 @@ def _part_colours(data: bytes, base: int = 1) -> dict[str, str]:
     out: dict[str, str] = {}
     for m in re.finditer(r'<part id="(\d+)"[^>]*>(.*?)</part>', xml, re.S):
         ref = re.search(r'key="(?:filament_id|extruder)" value="(\d+)"', m.group(2))
-        if ref:
-            out[m.group(1)] = colours[int(ref.group(1)) - base].upper()
+        if ref and int(ref.group(1)) != 0:  # 0 is "default", not a colour of its own
+            out[m.group(1)] = colours[int(ref.group(1)) - 1].upper()
     return out
 
 
@@ -77,13 +77,20 @@ def test_reorder_keeps_artwork():
     assert report.slices_stripped
 
 
-def test_reorder_keeps_artwork_with_0_based_references():
-    """Some builds number the per-part refs from 0; the remap must follow suit."""
-    data = build_3mf(ref_base=0)
+def test_reorder_keeps_artwork_with_default_filament_refs():
+    """0 means "default filament" (negative parts), not filament 0.
+
+    Reading it as 0-based shifted every other reference by one tool and
+    recoloured the model — the magnets project hit exactly this.
+    """
+    data = build_3mf(default_refs=True)
     order = [0, 5, 2, 1, 4, 6, 7, 3, 8]
     new_data, report = threemf.reorder_project(data, order)
 
-    assert _part_colours(new_data, base=0) == _part_colours(data, base=0)
+    assert _part_colours(new_data) == _part_colours(data)
+    xml = threemf._read_zip(new_data)["Metadata/model_settings.config"].decode()
+    assert xml.count('key="filament_id" value="0"') == 1  # still the default
+    assert xml.count('key="extruder" value="0"') == 1
     assert report.references_remapped == 2 * len(FILAMENTS)
     assert not report.warnings
 

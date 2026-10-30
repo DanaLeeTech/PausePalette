@@ -7,7 +7,7 @@
  */
 "use strict";
 
-const VERSION = "v3";
+const VERSION = "v4";
 const CACHE = `pausepalette-${VERSION}`;
 const BASE = new URL("./", self.location.href);
 const at = (path) => new URL(path, BASE).href;

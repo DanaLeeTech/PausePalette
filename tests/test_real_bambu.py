@@ -133,7 +133,7 @@ def test_real_project_keeps_the_darkest_colour_resident(real_data):
     assert plan.colour_moves == 0
 
 
-def _part_colours(data: bytes, base: int = 1) -> dict[str, str]:
+def _part_colours(data: bytes) -> dict[str, str]:
     """part uuid -> the colour hex it prints with, from its own filament ref."""
     entries = threemf._read_zip(data)
     colours = json.loads(entries["Metadata/project_settings.config"])["filament_colour"]
@@ -141,8 +141,8 @@ def _part_colours(data: bytes, base: int = 1) -> dict[str, str]:
     out: dict[str, str] = {}
     for m in re.finditer(r'<part [^>]*uuid="([^"]+)"[^>]*>(.*?)</part>', xml, re.S):
         ref = re.search(r'key="(?:filament_id|extruder)" value="(\d+)"', m.group(2))
-        if ref:
-            out[m.group(1)] = colours[int(ref.group(1)) - base].upper()
+        if ref and int(ref.group(1)) != 0:  # 0 is "default", not a colour of its own
+            out[m.group(1)] = colours[int(ref.group(1)) - 1].upper()
     return out
 
 
