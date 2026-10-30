@@ -257,6 +257,33 @@ def test_full_two_stage_flow():
     assert stage3.edited.text.count("MANUAL SPOOL SWAP") == 12  # 6 start + 6 end
 
 
+def test_existing_pauses_are_kept():
+    """Pauses added in the slicer survive: only its own blocks are inserted."""
+    project = build_3mf()
+    stage1 = plan_from_project(project, slots=4)
+    plan = stage1.plan
+    old_to_new = {FILAMENTS.index(h): i for i, h in enumerate(plan.filament_colour)}
+    resliced = parse_slice_simulation(old_to_new, plan.filament_colour)
+
+    # the user adds a pause mid-print and one right before the first swap anchor
+    lines = resliced.splitlines(keepends=True)
+    user = "M400 U1 ; user paused to insert a magnet\n"
+    lines.insert(len(lines) // 3, user)
+    first_t = next(i for i, ln in enumerate(lines) if ln.strip().startswith("M620"))
+    lines.insert(first_t, user)
+    paused = "".join(lines)
+
+    before_u1 = sum(1 for ln in paused.splitlines() if ln.strip().startswith("M400 U1"))
+    result = insert_into_slice(paused.encode("utf-8"), plan)
+
+    assert result.report.ok, result.report.failures()
+    assert result.edited.text.count("user paused to insert a magnet") == 2
+    after_u1 = sum(
+        1 for ln in result.edited.text.splitlines() if ln.strip().startswith("M400 U1")
+    )
+    assert after_u1 == before_u1 + len(plan.pauses)
+
+
 def test_stage3_stops_on_original_slice():
     project = build_3mf()
     plan = plan_from_project(project, slots=4).plan

@@ -139,7 +139,9 @@ function stageTwoCard(job, page) {
   <section class="card">
     <h2><span class="step">3</span> Upload the slice back</h2>
     <p class="muted">After slicing and exporting the plate sliced file, upload it here.
-       PausePalette checks it against the plan before touching it.</p>
+       PausePalette checks it against the plan before touching it, and leaves any
+       pauses you added in Bambu Studio alone. Add any extra pauses before you
+       upload — the finished file must not be sliced again.</p>
     <form id="sliceForm">
       <div class="field">
         <span class="field-label">Sliced file (.gcode or .3mf)</span>
