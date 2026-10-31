@@ -105,6 +105,7 @@ function stageTwoCard(job, page) {
       )
       .join("");
   const pins = (plan && plan.first_layer_order) || [];
+  const pinned = pins.slice(1).filter((pin) => pin !== null && pin !== undefined).length;
   // positions 2..N: "Auto" leaves the search free, a colour pins that spot
   const rest = choices
     .slice(1)
@@ -121,8 +122,8 @@ function stageTwoCard(job, page) {
           <label>First colour printed
             <select name="first_colour">${options(plan.first_colour, false)}</select>
           </label>
-          <details${pins.slice(1).some((pin) => pin !== null && pin !== undefined) ? " open" : ""}>
-            <summary>Set the exact order of the first layer</summary>
+          <details>
+            <summary>Set the exact order of the first layer${pinned ? ` (${pinned} set)` : ""}</summary>
             ${rest}
           </details>
           <button class="btn ghost" type="submit">Regenerate plan</button>
