@@ -23,7 +23,6 @@ from .pipeline import (
     plan_from_project,
     plan_to_dict,
 )
-from .planner import plan_for_gcode
 
 
 def _out_path(src: Path, suffix: str) -> Path:

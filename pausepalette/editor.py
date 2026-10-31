@@ -52,7 +52,6 @@ def insert_pauses(
         result.text = gf.text()
         return result
 
-    by_ordinal = {b.ordinal: b for b in gf.tool_changes}
     anchors = {p.anchor_ordinal: p for p in plan.pauses}
     total = len(plan.pauses)
 

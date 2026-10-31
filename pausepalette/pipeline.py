@@ -23,7 +23,7 @@ from .verifier import verify
 
 
 # ---------------------------------------------------------------------------
-# Stage 1
+# Planning: a project in, a colour plan and a reordered project out
 # ---------------------------------------------------------------------------
 
 
@@ -463,12 +463,12 @@ def plan_from_project(
                 new_plan.first_colour_choices = sorted(used[first_layer])
                 new_plan.first_layer_order = pins
                 notes.append(
-                    f"this project is not sliced; the plan below is the whole print, "
-                    f"worked out from the model's own geometry — which filament each "
-                    f"layer prints with. The colour order for each layer was chosen to "
-                    f"need the fewest pauses and is written into the project, so the "
-                    f"slicer prints it. It is provisional: the exact pause count and "
-                    f"positions are confirmed when you upload the slice."
+                    "this project is not sliced; the plan below is the whole print, "
+                    "worked out from the model's own geometry — which filament each "
+                    "layer prints with. The colour order for each layer was chosen to "
+                    "need the fewest pauses and is written into the project, so the "
+                    "slicer prints it. It is provisional: the exact pause count and "
+                    "positions are confirmed when you upload the slice."
                 )
             else:
                 notes.append(
@@ -537,7 +537,7 @@ def plan_from_project(
 
 
 # ---------------------------------------------------------------------------
-# Stage 3
+# Pause insertion: a slice in, edited G-code and a verification report
 # ---------------------------------------------------------------------------
 
 
