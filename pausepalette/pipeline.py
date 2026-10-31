@@ -205,48 +205,69 @@ ORDER_SEARCH_BUDGET = 300
 ORDER_SEARCH_SPAN = 6
 
 
+def _normalise_first_layer_order(
+    used: dict[int, set[int]], order: list[int | None] | None
+) -> list[int | None]:
+    """The pins that name a first-layer colour, once, in range; the rest None."""
+    if not order or not used:
+        return []
+    present = used[min(used)]
+    pins: list[int | None] = []
+    for colour in order[: len(present)]:
+        pins.append(None if colour not in present or colour in pins else colour)
+    while pins and pins[-1] is None:
+        pins.pop()
+    return pins
+
+
 def choose_layer_orders(
     used: dict[int, set[int]],
     lums: dict[int, float],
     names: dict[int, str],
     slots: int,
-    first_colour: int | None = None,
+    first_layer_order: list[int | None] | None = None,
     budget: int = ORDER_SEARCH_BUDGET,
     max_span: int = ORDER_SEARCH_SPAN,
 ) -> dict[int, list[int]]:
     """The colour print order for each layer: fewest pauses, then fewest swaps.
 
-    The first layer starts with ``first_colour`` (the darkest colour by default)
-    and each later layer with the colour the one before it ended on, so nothing
-    needs swapping at a layer boundary; the rest of each layer follows darkest to
-    lightest. A bounded search then swaps colours within a layer while that
-    improves the plan, so the result is never worse than those rules alone.
+    The first layer starts with the order ``first_layer_order`` pins — a colour
+    per position, ``None`` where PausePalette may choose — and the free spots
+    take the remaining colours darkest to lightest. Each later layer starts with
+    the colour the one before it ended on, so nothing needs swapping at a layer
+    boundary; the rest of each layer follows darkest to lightest. A bounded
+    search then swaps colours within a layer while that improves the plan, never
+    moving a pinned position, so the result is never worse than those rules
+    alone.
     """
     layers = sorted(used)
     if not layers:
         return {}
+    first_layer = layers[0]
 
     # ``used`` holds 1-based filament ids; ``lums`` is indexed by tool
     def luminance(colour: int) -> float:
         return lums.get(colour - 1, 0.5)
 
-    darkest = min(used[layers[0]], key=lambda t: (luminance(t), t))
-    first = first_colour if first_colour in used[layers[0]] else darkest
-
     def darkest_first(colours):
         return sorted(colours, key=lambda t: (luminance(t), t))
+
+    pins = list(first_layer_order or [])[: len(used[first_layer])]
+    pinned = {pos for pos, colour in enumerate(pins) if colour is not None}
 
     orders: dict[int, list[int]] = {}
     previous: int | None = None
     for layer in layers:
         present = used[layer]
-        if layer == layers[0] and first in present:
-            start = [first]
+        if layer == first_layer:
+            seed = pins + [None] * (len(present) - len(pins))
+            rest = iter(darkest_first(t for t in present if t not in seed))
+            orders[layer] = [next(rest) if colour is None else colour for colour in seed]
         elif previous in present:
             start = [previous]
+            orders[layer] = start + darkest_first(t for t in present if t not in start)
         else:
-            start = []
-        orders[layer] = start + darkest_first(t for t in present if t not in start)
+            orders[layer] = darkest_first(present)
         previous = orders[layer][-1]
 
     def key(candidate: dict[int, list[int]]):
@@ -274,10 +295,15 @@ def choose_layer_orders(
         improved = False
         for layer in movable:
             size = len(orders[layer])
+            # position 0 is the first colour; the rest of the first layer's pins
+            # stay where the user put them
+            locked = ({0} | pinned) if layer == first_layer else {0}
             for span in range(1, max_span + 1):
-                for i in range(1, size - span):  # position 0 is the first colour
+                for i in range(1, size - span):
                     if tried >= budget:
                         break
+                    if i in locked or i + span in locked:
+                        continue
                     candidate = {k: list(v) for k, v in orders.items()}
                     candidate[layer][i], candidate[layer][i + span] = (
                         candidate[layer][i + span],
@@ -300,7 +326,10 @@ def choose_layer_orders(
 
 
 def plan_from_project(
-    data: bytes, slots: int = 4, plate: int = 1, first_colour: int | None = None
+    data: bytes,
+    slots: int = 4,
+    plate: int = 1,
+    first_layer_order: list[int | None] | None = None,
 ) -> Stage1Result:
     info = threemf.read_project(data, plate=plate)
     notes: list[str] = []
@@ -375,6 +404,7 @@ def plan_from_project(
         names = {i: n for i, n in enumerate(_assign_colour_letters(info.filaments))}
         used: dict[int, set[int]] = {}
         layer_orders: dict[int, list[int]] = {}
+        pins: list[int | None] = []
         tools: list[int] = []
         block_layers: list[int] = []
         from_model = False
@@ -386,8 +416,9 @@ def plan_from_project(
                     if 1 <= colour <= len(info.filaments):
                         for layer in where:
                             used.setdefault(layer, set()).add(colour)
+                pins = _normalise_first_layer_order(used, first_layer_order)
                 layer_orders = choose_layer_orders(
-                    used, lums, names, slots, first_colour=first_colour
+                    used, lums, names, slots, first_layer_order=pins
                 )
                 tools, block_layers = _sequence_from_orders(layer_orders)
                 from_model = bool(tools)
@@ -430,6 +461,7 @@ def plan_from_project(
                 first_layer = min(layer_orders)
                 new_plan.first_colour = layer_orders[first_layer][0]
                 new_plan.first_colour_choices = sorted(used[first_layer])
+                new_plan.first_layer_order = pins
                 notes.append(
                     f"this project is not sliced; the plan below is the whole print, "
                     f"worked out from the model's own geometry — which filament each "
@@ -711,6 +743,7 @@ def plan_to_dict(plan: Plan) -> dict:
         "layer_orders": {str(layer): ids for layer, ids in plan.layer_orders.items()},
         "first_colour": plan.first_colour,
         "first_colour_choices": plan.first_colour_choices,
+        "first_layer_order": plan.first_layer_order,
         "warnings": plan.warnings,
         "timeline": [{"label": s.label, "positions": s.positions} for s in plan.timeline],
         "pauses": [
@@ -773,6 +806,7 @@ def plan_from_dict(d: dict) -> Plan:
         },
         first_colour=d.get("first_colour"),
         first_colour_choices=list(d.get("first_colour_choices", [])),
+        first_layer_order=list(d.get("first_layer_order", [])),
     )
     for p in d.get("pauses", []):
         plan.pauses.append(

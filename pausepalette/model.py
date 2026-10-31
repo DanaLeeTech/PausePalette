@@ -157,6 +157,9 @@ class Plan:
     layer_orders: dict[int, list[int]] = field(default_factory=dict)
     first_colour: int | None = None
     first_colour_choices: list[int] = field(default_factory=list)
+    # The first layer's positions the user pinned, 1-based filament ids, ``None``
+    # where PausePalette may choose. Empty means the order is all its own.
+    first_layer_order: list[int | None] = field(default_factory=list)
 
     def tool_name(self, tool: int | None) -> str:
         if tool is None:

@@ -212,7 +212,7 @@ def test_real_unsliced_project_gets_the_whole_plan(real_unsliced):
 
 @needs_real_unsliced
 def test_real_unsliced_plan_can_start_on_another_colour(real_unsliced):
-    stage1 = plan_from_project(real_unsliced, slots=4, plate=1, first_colour=5)
+    stage1 = plan_from_project(real_unsliced, slots=4, plate=1, first_layer_order=[5])
     plan = stage1.plan
     assert plan.first_colour == 5
     assert plan.layer_orders[min(plan.layer_orders)][0] == 5

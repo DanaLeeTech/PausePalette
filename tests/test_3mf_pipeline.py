@@ -156,13 +156,60 @@ def test_first_colour_defaults_to_the_darkest_and_can_be_chosen():
     default = plan_from_project(project, slots=4).plan
     assert default.first_colour == 1          # black is the darkest colour
     assert default.first_colour_choices == list(range(1, 10))
+    assert default.first_layer_order == []    # nothing pinned: the order is chosen
     assert default.layer_orders[min(default.layer_orders)][0] == 1
 
-    other = plan_from_project(project, slots=4, first_colour=5).plan
+    other = plan_from_project(project, slots=4, first_layer_order=[5]).plan
     assert other.first_colour == 5
     assert other.layer_orders[min(other.layer_orders)][0] == 5
+    assert other.first_layer_order == [5]
     assert len(other.pauses) >= 1
     assert other.first_colour_choices == list(range(1, 10))
+
+
+def test_first_layer_order_can_be_pinned_position_by_position():
+    """Choosing the 2nd, 3rd, ... colour fixes those spots; the rest stay free."""
+    project = geometry_3mf()
+    plan = plan_from_project(project, slots=4, first_layer_order=[1, 9, None, 4]).plan
+    assert plan.first_colour == 1
+    first = plan.layer_orders[min(plan.layer_orders)]
+    assert first[:2] == [1, 9] and first[3] == 4   # the pins, in their places
+    assert sorted(first) == list(range(1, 10))     # every layer-1 colour once
+    assert plan.first_layer_order == [1, 9, None, 4]  # echoed, so the UI keeps them
+
+
+def test_first_layer_order_can_be_chosen_completely():
+    project = geometry_3mf()
+    order = [3, 1, 9, 2, 8, 4, 7, 5, 6]
+    plan = plan_from_project(project, slots=4, first_layer_order=order).plan
+    assert plan.layer_orders[min(plan.layer_orders)] == order
+    assert plan.first_colour == 3
+    assert plan.first_layer_order == order
+    assert plan_from_dict(json.loads(json.dumps(plan_to_dict(plan)))).first_layer_order == order
+
+
+def test_bad_first_layer_pins_are_ignored():
+    project = geometry_3mf()
+    plan = plan_from_project(project, slots=4, first_layer_order=[1, 99, 1, 7]).plan
+    # 99 is not a first-layer colour and 1 appears twice: both spots go back to
+    # auto; the good pin at the 4th position stays
+    assert plan.first_layer_order == [1, None, None, 7]
+    assert plan.layer_orders[min(plan.layer_orders)][3] == 7
+
+
+def test_pinned_first_layer_order_is_written_into_the_project():
+    project = geometry_3mf()
+    stage1 = plan_from_project(project, slots=4, first_layer_order=[1, 9, 2])
+    plan = stage1.plan
+    xml = threemf._read_zip(stage1.reordered_project)["Metadata/model_settings.config"].decode()
+    ids = [int(x) for x in re.search(
+        r'key="first_layer_print_sequence" value="([^"]*)"', xml).group(1).split()]
+    new_id = {
+        old: plan.filament_colour.index(plan.original_filaments[old - 1]) + 1
+        for old in range(1, 10)
+    }
+    assert ids[:3] == [new_id[c] for c in (1, 9, 2)]
+    assert sorted(ids) == sorted(new_id.values())
 
 
 def test_reordered_project_carries_the_chosen_layer_order():

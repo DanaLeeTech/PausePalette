@@ -314,35 +314,40 @@ async function phaseTwo() {
   results.values.bufferCountAfterConvert3mf = heap("after convert(.3mf)/readBuffers", out3mf);
   check("buffers_freed_after_convert_3mf", results.values.bufferCountAfterConvert3mf === 0);
 
-  // first colour: re-plan the stored project from a chosen colour
+  // first-layer order: re-plan the stored project with a colour pinned
   const before = await run({ type: "getJob", jobId });
   const beforeJson = canonicalJson(before.page.plan);
   const colours = before.page.plan.first_colour_choices.length
     ? before.page.plan.first_colour_choices
     : before.page.plan.original_filaments.map((_, index) => index + 1);
-  const firstColour = await run({ type: "firstColour", jobId, colour: colours[0] });
-  results.timingsMs.firstColour = firstColour.timings;
-  const afterJson = canonicalJson(firstColour.page.plan);
-  check("first_colour_ok", firstColour.ok === true && firstColour.job.stage === "planned", {
+  const firstLayerOrder = await run({
+    type: "firstLayerOrder",
+    jobId,
+    order: [colours[0]],
+  });
+  results.timingsMs.firstLayerOrder = firstLayerOrder.timings;
+  const afterJson = canonicalJson(firstLayerOrder.page.plan);
+  check("first_layer_order_ok", firstLayerOrder.ok === true && firstLayerOrder.job.stage === "planned", {
     colour: colours[0],
     colours: colours,
-    pauses: firstColour.page.plan.pauses.length,
+    pauses: firstLayerOrder.page.plan.pauses.length,
     planChanged: beforeJson !== afterJson,
   });
   check(
-    "first_colour_plan_valid",
-    Array.isArray(firstColour.page.plan.pauses) &&
-      typeof firstColour.page.plan.slots === "number" &&
-      Array.isArray(firstColour.page.plan.filament_colour),
-    { slots: firstColour.page.plan.slots, filamentColour: firstColour.page.plan.filament_colour },
+    "first_layer_order_plan_valid",
+    Array.isArray(firstLayerOrder.page.plan.pauses) &&
+      typeof firstLayerOrder.page.plan.slots === "number" &&
+      Array.isArray(firstLayerOrder.page.plan.filament_colour) &&
+      Array.isArray(firstLayerOrder.page.plan.first_layer_order),
+    { slots: firstLayerOrder.page.plan.slots, filamentColour: firstLayerOrder.page.plan.filament_colour },
   );
   const replanned = await run({ type: "readBuffer", jobId, name: "reordered.3mf" });
   check(
-    "first_colour_reordered_still_matches_cli",
+    "first_layer_order_reordered_still_matches_cli",
     (await sha256Hex(new Uint8Array(replanned.buffer))) === expected.reordered_3mf_sha256,
   );
-  results.values.bufferCountAfterFirstColour = heap("after firstColour", replanned);
-  check("buffers_freed_after_first_colour", results.values.bufferCountAfterFirstColour === 0);
+  results.values.bufferCountAfterFirstLayerOrder = heap("after firstLayerOrder", replanned);
+  check("buffers_freed_after_first_layer_order", results.values.bufferCountAfterFirstLayerOrder === 0);
 
   // regenerate re-runs the stored input, exactly as a re-upload would: once for
   // a project (stage 1) and once for a converted slice (stage 3)
@@ -417,7 +422,7 @@ async function phaseTwo() {
   const deleted = await run({ type: "deleteJob", jobId });
   results.timingsMs.deleteJob = deleted.timings;
   const gone = await runReply(worker, { type: "getJob", jobId });
-  check("delete_removes_job", deleted.ok === true && gone.ok === false && /no such job/.test(gone.error || ""), {
+  check("delete_removes_job", deleted.ok === true && gone.ok === false && /no longer in this browser/.test(gone.error || ""), {
     getError: gone.error,
     buffersAfterDelete: deleted.diag.buffers,
   });

@@ -213,6 +213,9 @@ input[type=number] { max-width: 130px; }
   box-shadow: 3px 3px 0 hsl(var(--ink)); font: inherit;
 }
 .first-colour .muted { font-size: 12.5px; }
+.first-colour details { flex-basis: 100%; }
+.first-colour details summary { cursor: pointer; font-size: 13.5px; }
+.first-colour details label { margin-top: 8px; }
 
 /* --- buttons ------------------------------------------------------------ */
 

@@ -93,22 +93,40 @@ function stageTwoCard(job, page) {
       ? `<h3 class="sub">Filament list, in order</h3>${ui.filamentOrder(plan)}`
       : "";
   const choices = (plan && plan.first_colour_choices) || [];
+  const names = (plan && plan.original_names) || [];
+  const colourLabel = (colour) =>
+    colour - 1 < names.length ? names[colour - 1] : `T${colour - 1}`;
+  const options = (chosen, auto) =>
+    (auto ? `<option value="auto"${chosen === null ? " selected" : ""}>Auto — best order</option>` : "") +
+    choices
+      .map(
+        (colour) =>
+          `<option value="${colour}"${colour === chosen ? " selected" : ""}>${PP.esc(colourLabel(colour))}</option>`,
+      )
+      .join("");
+  const pins = (plan && plan.first_layer_order) || [];
+  // positions 2..N: "Auto" leaves the search free, a colour pins that spot
+  const rest = choices
+    .slice(1)
+    .map(
+      (_, i) =>
+        `<label>${["2nd", "3rd", "4th"][i] || `${i + 2}th`} colour printed
+          <select name="p${i + 2}">${options(pins[i + 1] ?? null, true)}</select>
+        </label>`,
+    )
+    .join("");
   const picker =
     choices.length > 1
       ? `<form class="first-colour" id="firstColourForm">
           <label>First colour printed
-            <select name="first_colour">
-              ${choices
-                .map((colour) => {
-                  const names = plan.original_names || [];
-                  const label = colour - 1 < names.length ? names[colour - 1] : `T${colour - 1}`;
-                  return `<option value="${colour}"${colour === plan.first_colour ? " selected" : ""}>${PP.esc(label)}</option>`;
-                })
-                .join("")}
-            </select>
+            <select name="first_colour">${options(plan.first_colour, false)}</select>
           </label>
+          <details${pins.slice(1).some((pin) => pin !== null && pin !== undefined) ? " open" : ""}>
+            <summary>Set the exact order of the first layer</summary>
+            ${rest}
+          </details>
           <button class="btn ghost" type="submit">Regenerate plan</button>
-          <span class="muted">the plan is worked out again from that colour</span>
+          <span class="muted">the plan is worked out again with the first layer in this order</span>
         </form>`
       : "";
   const report = job.reorder_report || {};
@@ -364,11 +382,12 @@ content.addEventListener("submit", async (event) => {
   const form = event.target;
   if (form.id === "firstColourForm") {
     event.preventDefault();
-    await rerun({
-      type: "firstColour",
-      jobId: jobId,
-      colour: Number(form.elements.first_colour.value),
-    });
+    const order = [Number(form.elements.first_colour.value)];
+    for (let position = 2; form.elements[`p${position}`]; position += 1) {
+      const value = form.elements[`p${position}`].value;
+      order.push(value === "auto" ? null : Number(value));
+    }
+    await rerun({ type: "firstLayerOrder", jobId: jobId, order });
   }
 });
 

@@ -2,11 +2,11 @@
  *
  * Main -> worker (every message carries `id`; the reply repeats it):
  *   {id, type:"init"}
- *   {id, type:"plan", filename, slots, plate, firstColour?, file:ArrayBuffer}
+ *   {id, type:"plan", filename, slots, plate, firstLayerOrder?, file:ArrayBuffer}
  *   {id, type:"convert", filename, slots, file:ArrayBuffer}
  *   {id, type:"slice", jobId, filename, file:ArrayBuffer}
  *   {id, type:"regenerate", jobId}
- *   {id, type:"firstColour", jobId, colour}
+ *   {id, type:"firstLayerOrder", jobId, order}
  *   {id, type:"readBuffer", jobId, name}
  *   {id, type:"listJobs"}          {id, type:"getJob", jobId}
  *   {id, type:"deleteJob", jobId}  {id, type:"clearJobs"}
@@ -190,12 +190,15 @@ def _reorder_report(rep):
     }
 
 
-def plan_op(filename, data, slots, plate, first_colour):
+def plan_op(filename, data, slots, plate, first_layer_order):
     data = bytes(data)
     try:
         _check(filename, data, "project")
         stage1 = plan_from_project(
-            data, slots=slots, plate=plate, first_colour=first_colour
+            data,
+            slots=slots,
+            plate=plate,
+            first_layer_order=json.loads(first_layer_order) if first_layer_order else None,
         )
     except StopAndExplain as exc:
         return _json({"ok": False, "error": str(exc)})
@@ -501,7 +504,7 @@ async function buildPage(meta, error) {
 
 /* --- stage 1: plan ------------------------------------------------------- */
 
-async function runProjectPlan(meta, filename, file, slots, plate, firstColour) {
+async function runProjectPlan(meta, filename, file, slots, plate, firstLayerOrder) {
   const timings = {};
   const tIngest = now();
   const bid = ingest(file, "project");
@@ -509,7 +512,11 @@ async function runProjectPlan(meta, filename, file, slots, plate, firstColour) {
   let res;
   try {
     const t0 = now();
-    res = JSON.parse(PY.plan_op(filename, bufferProxy(bid), slots, plate, none(firstColour)));
+    const orderJson =
+      Array.isArray(firstLayerOrder) && firstLayerOrder.length
+        ? JSON.stringify(firstLayerOrder)
+        : undefined;
+    res = JSON.parse(PY.plan_op(filename, bufferProxy(bid), slots, plate, none(orderJson)));
     timings.coreMs = round(now() - t0);
   } finally {
     release(bid);
@@ -542,6 +549,7 @@ async function runProjectPlan(meta, filename, file, slots, plate, firstColour) {
     deferred: res.plan.deferred,
     first_colour: res.plan.first_colour,
     first_colour_choices: res.plan.first_colour_choices,
+    first_layer_order: res.plan.first_layer_order,
     reorder_report: res.reorder,
   };
   const files = {
@@ -574,7 +582,7 @@ async function planJob(msg) {
   };
   await save({ id: meta.id, meta: meta });
   try {
-    const done = await runProjectPlan(meta, filename, file, slots, plate, msg.firstColour);
+    const done = await runProjectPlan(meta, filename, file, slots, plate, msg.firstLayerOrder);
     return { ok: true, jobId: meta.id, job: done.meta, page: await buildPage(done.meta), timings: done.timings };
   } catch (err) {
     await store.delete(meta.id).catch(() => {}); // don't leave a half-made job behind
@@ -780,7 +788,14 @@ async function regenerateJob(msg) {
 
   let done;
   if (project) {
-    done = await runProjectPlan(meta, name, project.value, slots, meta.plate || 1, none(meta.first_colour));
+    // jobs saved before the pins existed keep the first colour they chose
+    const pins =
+      meta.first_layer_order && meta.first_layer_order.length
+        ? meta.first_layer_order
+        : meta.first_colour
+          ? [meta.first_colour]
+          : null;
+    done = await runProjectPlan(meta, name, project.value, slots, meta.plate || 1, pins);
   } else if (slice3mf) {
     done = await runConvert(meta, name, slice3mf.value, slots, none(meta.plate));
   } else if (sliceGcode) {
@@ -791,23 +806,28 @@ async function regenerateJob(msg) {
   return { ok: true, jobId: jobId, job: done.meta, page: await buildPage(done.meta), timings: done.timings };
 }
 
-async function firstColourJob(msg) {
+async function firstLayerOrderJob(msg) {
   const jobId = String(msg.jobId || "");
   const meta = await requireMeta(jobId);
-  const colour = intOr(msg.colour, 0);
   const project = await store.getFile(jobId, "project.3mf");
   if (!project) throw new UserError("This job no longer has its original project, so it cannot be regenerated.");
   const choices = meta.first_colour_choices || [];
-  if (choices.length && !choices.includes(colour)) {
-    throw new UserError("that colour is not one of the first layer's colours");
-  }
+  const order = (Array.isArray(msg.order) ? msg.order : []).map((colour) =>
+    colour === null ? null : Number(colour)
+  );
+  const valid = order.every(
+    (colour) =>
+      colour === null ||
+      (Number.isInteger(colour) && (!choices.length || choices.includes(colour)))
+  );
+  if (!valid) throw new UserError("that colour is not one of the first layer's colours");
   const done = await runProjectPlan(
     meta,
     meta.original_name || "project.3mf",
     project.value,
     intOr(meta.slots, 4),
     meta.plate || 1,
-    colour,
+    order,
   );
   return { ok: true, jobId: jobId, job: done.meta, page: await buildPage(done.meta), timings: done.timings };
 }
@@ -906,9 +926,9 @@ async function handle(msg) {
     case "regenerate":
       await ensureBooted();
       return regenerateJob(msg);
-    case "firstColour":
+    case "firstLayerOrder":
       await ensureBooted();
-      return firstColourJob(msg);
+      return firstLayerOrderJob(msg);
     case "readBuffer":
       await ensureBooted();
       return readBuffer(msg);
@@ -943,9 +963,9 @@ self.onmessage = async (event) => {
       error: String((err && err.message) || err),
       unexpected: !user,
     };
-    // app.py answered a refused slice / first colour / regenerate with the job
+    // app.py answered a refused slice / first-layer order / regenerate with the job
     // page plus an error banner; do the same so the UI keeps the job on screen.
-    if (user && msg.jobId && ["slice", "firstColour", "regenerate"].includes(msg.type)) {
+    if (user && msg.jobId && ["slice", "firstLayerOrder", "regenerate"].includes(msg.type)) {
       try {
         const meta = await store.getMeta(String(msg.jobId));
         if (meta) {
