@@ -14,6 +14,10 @@ get wrong. PausePalette works it out for you:
 
 No AMS? Set one slot and swap by hand at each pause.
 
+## Screenshots
+
+![PausePalette planner](docs/screenshot.png)
+
 ## Your files stay on your machine
 
 The site is static: the planner runs in your browser (Python compiled to
@@ -104,7 +108,7 @@ docker run --rm -v "$PWD:/work" -w /work --entrypoint pausepalette \
 pip install -e ".[dev]"
 playwright install chromium      # once, for the browser tests
 pytest -q
-python tools/build_site.py --dev dist && python -m http.server -d dist
+python tools/build_site.py --dev dist && python -m http.server -d dist 8123
 python tools/make_sample.py      # samples/Keychain.3mf and .gcode
 ```
 
@@ -115,11 +119,11 @@ when `PAUSEPALETTE_REAL_3MF` points at a project.
 ```
 pausepalette/    core library (stdlib only): planner, G-code, 3MF, verifier, CLI
 web/             static PWA: Pyodide worker, IndexedDB jobs, service worker
-tools/           build_site.py (dist/ for Pages and Docker), icons, sample
+tools/           build_site.py (dist/ for Pages and Docker), icons, og image, sample
 tests/           golden tests on a replica of the reference print
 ```
 
-Bump `VERSION` in `web/sw.js` whenever `web/` changes, or installed copies keep
-the old cache.
+Bump `VERSION` in `web/sw.js` whenever `web/` or `pausepalette/` changes, or
+installed copies keep the old cache.
 
 MIT licensed.
