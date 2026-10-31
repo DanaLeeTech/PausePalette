@@ -7,7 +7,7 @@
  */
 "use strict";
 
-const VERSION = "v8";
+const VERSION = "v9";
 const CACHE = `pausepalette-${VERSION}`;
 const BASE = new URL("./", self.location.href);
 const at = (path) => new URL(path, BASE).href;
@@ -27,10 +27,11 @@ const PYODIDE_FILES = [
 const FONTS =
   "https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap";
 
-// The shell: both pages, every script they run, and the install artwork.
+// The shell: every page, every script they run, and the install artwork.
 const SHELL = [
   "index.html",
   "job.html",
+  "404.html",
   "app.js",
   "job.js",
   "render.js",

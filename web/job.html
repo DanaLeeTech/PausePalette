@@ -10,9 +10,9 @@
   <meta property="og:type" content="website">
   <meta property="og:title" content="PausePalette">
   <meta property="og:description" content="Offline colour planner and manual spool-swap pause inserter for Bambu / Orca AMS prints.">
-  <meta property="og:url" content="./">
-  <meta property="og:image" content="logo.png">
-  <meta name="twitter:card" content="summary">
+  <meta property="og:url" content="https://danaleetech.github.io/PausePalette/">
+  <meta property="og:image" content="https://danaleetech.github.io/PausePalette/og-image.png">
+  <meta name="twitter:card" content="summary_large_image">
   <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
   <link rel="apple-touch-icon" href="icon-180.png">
   <link rel="manifest" href="manifest.webmanifest">
@@ -34,14 +34,14 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=1">
+  <link rel="stylesheet" href="style.css?v=2">
   <script>
     // no server to ask: the page's own address is the canonical one
     (function () {
       var url = location.href.split("#")[0];
       document.querySelector('link[rel=canonical]').href = url;
       document.querySelector('meta[property="og:url"]').content = url;
-      document.querySelector('meta[property="og:image"]').content = new URL("logo.png", url).href;
+      document.querySelector('meta[property="og:image"]').content = new URL("og-image.png", url).href;
     })();
   </script>
 </head>

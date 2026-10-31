@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Page not found — PausePalette</title>
+  <!-- Served by GitHub Pages for a missing path at any depth, where these
+       relative files resolve against that path and miss: the page still reads,
+       just without its stylesheet, logo and fonts. -->
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+  <meta name="theme-color" content="#fcfcfc" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#121212" media="(prefers-color-scheme: dark)">
+  <script>
+    // pick the theme before first paint: stored choice, else the system's
+    (function () {
+      try {
+        var stored = localStorage.getItem("pp-theme");
+        var dark = stored ? stored === "dark"
+          : window.matchMedia("(prefers-color-scheme: dark)").matches;
+        if (dark) document.documentElement.classList.add("dark");
+      } catch (e) {}
+    })();
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css?v=2">
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="./">
+      <img class="logo" src="logo.png" alt="" width="38" height="38">
+      <span class="brand-name">PausePalette</span>
+    </a>
+  </header>
+  <main>
+    <section class="card not-found">
+      <h1>Page not found</h1>
+      <p class="muted">That address does not exist — the link may be old, or the
+         file has moved.</p>
+      <p><a class="btn" href="./">Back to PausePalette</a></p>
+    </section>
+  </main>
+</body>
+</html>

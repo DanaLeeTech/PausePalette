@@ -39,6 +39,14 @@
   --font-sans: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --font-display: 'Hanken Grotesk', 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* five type steps, and no sizes outside them: caption, secondary, body,
+     subhead, heading */
+  --fs-xs: 12px;
+  --fs-s: 13px;
+  --fs-m: 15px;
+  --fs-l: 17px;
+  --fs-xl: 24px;
 }
 
 .dark {
@@ -77,7 +85,7 @@ body {
   background: hsl(var(--background));
   color: hsl(var(--foreground));
   font-family: var(--font-sans);
-  font-size: 15px;
+  font-size: var(--fs-m);
   line-height: 1.55;
 }
 
@@ -101,7 +109,7 @@ input:focus { outline: 3px solid hsl(var(--ring)); outline-offset: 2px; }
 .brand {
   display: inline-flex; align-items: center; gap: 10px;
   color: hsl(var(--foreground)); text-decoration: none;
-  font-family: var(--font-display); font-weight: 700; font-size: 20px;
+  font-family: var(--font-display); font-weight: 700; font-size: var(--fs-l);
   letter-spacing: -0.01em;
 }
 .brand .logo {
@@ -117,10 +125,10 @@ input:focus { outline: 3px solid hsl(var(--ring)); outline-offset: 2px; }
 main { max-width: 980px; margin: 0 auto; padding: 24px; }
 
 h1, h2, h3 { font-family: var(--font-display); }
-h1 { font-size: 24px; font-weight: 700; letter-spacing: -0.01em; margin: 0 0 8px; }
-h2 { font-size: 17px; font-weight: 700; margin: 0 0 12px; }
+h1 { font-size: var(--fs-xl); font-weight: 700; letter-spacing: -0.01em; margin: 0 0 8px; }
+h2 { font-size: var(--fs-l); font-weight: 700; margin: 0 0 12px; }
 .hero { padding: 8px 0 22px; }
-.hero h1 { font-size: 30px; letter-spacing: -0.02em; }
+.hero h1 { font-size: var(--fs-xl); letter-spacing: -0.02em; }
 .hero p { color: hsl(var(--muted-foreground)); max-width: 62ch; margin: 0; }
 
 a { color: hsl(var(--link)); text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
@@ -171,21 +179,24 @@ main a:not(.btn):not(.brand):hover {
   margin-right: 8px; vertical-align: middle;
   border-radius: 0.4rem; border: 2px solid hsl(var(--ink));
   background: hsl(var(--secondary)); color: hsl(var(--secondary-foreground));
-  font-size: 13px; font-weight: 700; box-shadow: 2px 2px 0 hsl(var(--ink));
+  font-size: var(--fs-s); font-weight: 700; box-shadow: 2px 2px 0 hsl(var(--ink));
 }
+
+/* the 404 page: one short block, centred under the brand bar */
+.not-found { max-width: 46ch; margin: 56px auto; text-align: center; }
 
 /* --- inputs ------------------------------------------------------------- */
 
-label { display: block; margin: 14px 0; color: hsl(var(--muted-foreground)); font-size: 13.5px; }
+label { display: block; margin: 14px 0; color: hsl(var(--muted-foreground)); font-size: var(--fs-s); }
 .row { display: flex; gap: 20px; }
 .row label { flex: 0 0 auto; }
 
 /* A file pick is a button plus the chosen name: the same control serves the
    File System Access picker and the hidden fallback input underneath it. */
-.field { margin: 14px 0; color: hsl(var(--muted-foreground)); font-size: 13.5px; }
+.field { margin: 14px 0; color: hsl(var(--muted-foreground)); font-size: var(--fs-s); }
 .field > .field-label { display: block; margin-bottom: 8px; }
 .file-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
-.file-name { font-size: 13px; word-break: break-all; }
+.file-name { font-size: var(--fs-s); word-break: break-all; }
 input[type=file], input[type=number] {
   display: block; width: 100%; margin-top: 8px; padding: 10px 12px;
   background: hsl(var(--card)); color: hsl(var(--foreground));
@@ -198,7 +209,7 @@ input[type=file]::file-selector-button {
   margin-right: 12px; padding: 6px 12px; cursor: pointer;
   background: hsl(var(--secondary)); color: hsl(var(--secondary-foreground));
   border: 2px solid hsl(var(--ink)); border-radius: calc(var(--radius) - 6px);
-  font-family: var(--font-display); font-weight: 700; font-size: 13px;
+  font-family: var(--font-display); font-weight: 700; font-size: var(--fs-s);
 }
 input[type=number] { max-width: 130px; }
 
@@ -206,16 +217,16 @@ input[type=number] { max-width: 130px; }
 .first-colour {
   display: flex; align-items: flex-start; flex-wrap: wrap; gap: 12px; margin: 16px 0 4px;
 }
-.first-colour label { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 13.5px; }
+.first-colour label { display: flex; align-items: center; gap: 8px; margin: 0; font-size: var(--fs-s); }
 .first-colour select {
   padding: 8px 10px; background: hsl(var(--card)); color: hsl(var(--foreground));
   border: 2px solid hsl(var(--ink)); border-radius: calc(var(--radius) - 4px);
   box-shadow: 3px 3px 0 hsl(var(--ink)); font: inherit;
 }
-.first-colour .muted { font-size: 12.5px; }
+.first-colour .muted { font-size: var(--fs-s); }
 .first-colour .actions { display: flex; align-items: center; gap: 12px; }
 .first-colour details { margin: 0; }
-.first-colour details summary { cursor: pointer; font-size: 13.5px; }
+.first-colour details summary { cursor: pointer; font-size: var(--fs-s); }
 .first-colour details label { margin-top: 8px; }
 
 /* --- buttons ------------------------------------------------------------ */
@@ -225,7 +236,7 @@ button, .btn {
   padding: 10px 18px; border-radius: var(--radius);
   border: 2px solid hsl(var(--ink));
   background: hsl(var(--primary)); color: hsl(var(--primary-foreground));
-  font-family: var(--font-display); font-weight: 700; font-size: 14px;
+  font-family: var(--font-display); font-weight: 700; font-size: var(--fs-s);
   box-shadow: 4px 4px 0 hsl(var(--ink));
   cursor: pointer; text-decoration: none;
   transition: transform .12s ease, box-shadow .12s ease;
@@ -244,7 +255,7 @@ ol.steps li::before {
   display: grid; place-items: center; width: 22px; height: 22px;
   background: hsl(var(--accent)); color: hsl(var(--accent-foreground));
   border: 2px solid hsl(var(--ink)); border-radius: 0.4rem;
-  font-size: 12px; font-weight: 700;
+  font-size: var(--fs-xs); font-weight: 700;
 }
 
 /* --- tables ------------------------------------------------------------- */
@@ -252,7 +263,7 @@ ol.steps li::before {
 table {
   width: auto; min-width: 100%; border-collapse: separate; border-spacing: 0;
   border: 2px solid hsl(var(--ink)); border-radius: var(--radius);
-  overflow: hidden; font-size: 14px;
+  overflow: hidden; font-size: var(--fs-s);
 }
 .table-scroll { overflow-x: auto; }
 th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid hsl(var(--border)); vertical-align: top; }
@@ -260,18 +271,18 @@ th {
   background: hsl(var(--muted)); color: hsl(var(--foreground));
   border-bottom: 2px solid hsl(var(--ink));
   font-family: var(--font-display); font-weight: 700;
-  font-size: 12px; text-transform: uppercase; letter-spacing: .06em;
+  font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: .06em;
 }
 tbody tr:last-child th, tbody tr:last-child td { border-bottom: none; }
 tbody tr:hover { background: hsl(var(--muted)); }
-td code, code { font-family: var(--font-mono); font-size: 13px; }
+td code, code { font-family: var(--font-mono); font-size: var(--fs-s); }
 
 .stats { display: flex; flex-wrap: wrap; gap: 22px; }
 .stats .k {
-  display: block; color: hsl(var(--muted-foreground)); font-size: 11.5px;
+  display: block; color: hsl(var(--muted-foreground)); font-size: var(--fs-xs);
   text-transform: uppercase; letter-spacing: .06em;
 }
-.stats .v { font-family: var(--font-display); font-weight: 700; font-size: 16px; }
+.stats .v { font-family: var(--font-display); font-weight: 700; font-size: var(--fs-l); }
 
 .banner {
   padding: 14px 16px; border-radius: var(--radius); margin-bottom: 18px;
@@ -288,7 +299,7 @@ summary {
   padding: 8px 14px; border-radius: var(--radius);
   background: hsl(var(--card)); color: hsl(var(--foreground));
   border: 2px solid hsl(var(--ink)); box-shadow: 3px 3px 0 hsl(var(--ink));
-  font-family: var(--font-display); font-weight: 700; font-size: 13.5px;
+  font-family: var(--font-display); font-weight: 700; font-size: var(--fs-s);
   transition: transform .12s ease, box-shadow .12s ease;
 }
 summary::-webkit-details-marker { display: none; }
@@ -300,7 +311,7 @@ pre.checklist {
   border: 2px solid hsl(var(--ink)); border-radius: var(--radius);
   box-shadow: 4px 4px 0 hsl(var(--ink));
   padding: 16px; overflow: auto;
-  font-family: var(--font-mono); font-size: 12.5px; white-space: pre-wrap;
+  font-family: var(--font-mono); font-size: var(--fs-s); white-space: pre-wrap;
 }
 
 /* --- the graphical plan ---------------------------------------------------
@@ -309,10 +320,10 @@ pre.checklist {
    grounds; the chips are flat fills with no gradient. */
 
 h3.sub {
-  font-size: 12px; font-weight: 700; text-transform: uppercase;
+  font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase;
   letter-spacing: .08em; color: hsl(var(--muted-foreground)); margin: 20px 0 10px;
 }
-.h2-note { color: hsl(var(--muted-foreground)); font-weight: 400; font-size: 13px; }
+.h2-note { color: hsl(var(--muted-foreground)); font-weight: 400; font-size: var(--fs-s); }
 
 .chip {
   display: inline-block; flex: 0 0 auto; width: 14px; height: 14px;
@@ -344,15 +355,15 @@ h3.sub {
   box-shadow: 4px 4px 0 hsl(var(--ink));
 }
 .slot-empty { border-style: dashed; box-shadow: none; background: transparent; }
-.slot-pos { color: hsl(var(--muted-foreground)); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
-.slot-name { font-family: var(--font-display); font-weight: 600; font-size: 13px; text-align: center; }
-.slot-tool { color: hsl(var(--muted-foreground)); font-size: 11px; font-family: var(--font-mono); }
+.slot-pos { color: hsl(var(--muted-foreground)); font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: .06em; }
+.slot-name { font-family: var(--font-display); font-weight: 600; font-size: var(--fs-s); text-align: center; }
+.slot-tool { color: hsl(var(--muted-foreground)); font-size: var(--fs-xs); font-family: var(--font-mono); }
 
 /* positions x pauses grid: columns are the slots, rows are the print phases */
 .tl-scroll { overflow-x: auto; margin-bottom: 4px; padding: 4px; }
 table.tl { width: auto; min-width: 100%; }
 .tl-corner {
-  text-align: left; color: hsl(var(--muted-foreground)); font-size: 12px; white-space: nowrap;
+  text-align: left; color: hsl(var(--muted-foreground)); font-size: var(--fs-xs); white-space: nowrap;
   text-transform: none; letter-spacing: 0;
 }
 .tl-pos { text-align: center; white-space: nowrap; }
@@ -365,13 +376,13 @@ table.tl { width: auto; min-width: 100%; }
   column-gap: 16px; row-gap: 2px;
   text-align: left; vertical-align: middle; white-space: nowrap;
 }
-.tl-label { grid-column: 1; grid-row: 1; font-family: var(--font-display); font-weight: 700; font-size: 12px; text-transform: none; letter-spacing: 0; }
-.tl-layer { grid-column: 1; grid-row: 2; color: hsl(var(--muted-foreground)); font-size: 11px; font-weight: 400; text-transform: none; letter-spacing: 0; }
+.tl-label { grid-column: 1; grid-row: 1; font-family: var(--font-display); font-weight: 700; font-size: var(--fs-xs); text-transform: none; letter-spacing: 0; }
+.tl-layer { grid-column: 1; grid-row: 2; color: hsl(var(--muted-foreground)); font-size: var(--fs-xs); font-weight: 400; text-transform: none; letter-spacing: 0; }
 .tl-colours {
   grid-column: 2; grid-row: 1 / span 2; justify-self: end;
   display: grid; grid-template-columns: auto auto; align-items: baseline;
   column-gap: 6px; row-gap: 2px;
-  font-size: 11px; color: hsl(var(--muted-foreground));
+  font-size: var(--fs-xs); color: hsl(var(--muted-foreground));
   text-transform: none; letter-spacing: 0;
 }
 .tl-colours > span { display: contents; }   /* the words and the chip line up in columns */
@@ -390,38 +401,38 @@ table.tl { width: auto; min-width: 100%; }
 }
 .pause-head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
 .pause-no { font-family: var(--font-display); font-weight: 700; }
-.pause-of, .pause-meta { color: hsl(var(--muted-foreground)); font-size: 12.5px; }
+.pause-of, .pause-meta { color: hsl(var(--muted-foreground)); font-size: var(--fs-s); }
 .pause-meta { border-left: 2px solid hsl(var(--border)); padding-left: 10px; }
 /* estimated printing time left after the pause: reads as part of the layer
    stat, so no divider of its own — the dash is the separator */
-.pause-left { color: hsl(var(--muted-foreground)); font-size: 12.5px; white-space: nowrap; }
+.pause-left { color: hsl(var(--muted-foreground)); font-size: var(--fs-s); white-space: nowrap; }
 /* the same pair in a pause card's head: one line, pushed to the right of the
    pause it belongs to. Both ends are muted alike and sit on the text baseline,
    with the same 6px either side of each chip, split by the same thin rule the
    head already uses between its stats. */
-.pause-colours { margin-left: auto; font-size: 13px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; color: hsl(var(--muted-foreground)); }
+.pause-colours { margin-left: auto; font-size: var(--fs-s); display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; color: hsl(var(--muted-foreground)); }
 .pause-colours > span { display: flex; align-items: baseline; gap: 6px; }
 .pc-after { border-left: 2px solid hsl(var(--border)); padding-left: 12px; }
 .pause-check { width: 18px; height: 18px; margin: 0; accent-color: hsl(var(--primary)); cursor: pointer; }
 ul.swaps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-.swap { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; font-size: 13.5px; }
-.sw-pos { color: hsl(var(--muted-foreground)); font-size: 12px; min-width: 52px; font-family: var(--font-mono); }
+.swap { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; font-size: var(--fs-s); }
+.sw-pos { color: hsl(var(--muted-foreground)); font-size: var(--fs-xs); min-width: 52px; font-family: var(--font-mono); }
 .sw-arrow { color: hsl(var(--muted-foreground)); }
 
 /* positions per colour */
 ul.homes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 9px; }
-.homes li { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; font-size: 13.5px; }
-.homes-pos { color: hsl(var(--muted-foreground)); font-size: 12.5px; }
+.homes li { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; font-size: var(--fs-s); }
+.homes-pos { color: hsl(var(--muted-foreground)); font-size: var(--fs-s); }
 
 /* filament list */
 ol.filament-list { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-wrap: wrap; gap: 10px; }
 ol.filament-list li {
-  display: flex; align-items: center; gap: 8px; font-size: 13px;
+  display: flex; align-items: center; gap: 8px; font-size: var(--fs-s);
   background: hsl(var(--card)); border: 2px solid hsl(var(--ink));
   border-radius: var(--radius); box-shadow: 2px 2px 0 hsl(var(--ink));
   padding: 6px 13px 6px 10px;
 }
-.fl-no, .fl-tool { color: hsl(var(--muted-foreground)); font-size: 11.5px; font-family: var(--font-mono); }
+.fl-no, .fl-tool { color: hsl(var(--muted-foreground)); font-size: var(--fs-xs); font-family: var(--font-mono); }
 .fl-name { font-family: var(--font-display); font-weight: 600; }
 
 .banner.print-note {
@@ -452,7 +463,7 @@ td.actions-col { width: 1%; white-space: nowrap; text-align: right; }
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
   overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
 }
-.small { font-size: 12.5px; }
+.small { font-size: var(--fs-s); }
 
 @media print {
   /* printing always uses the paper theme, whatever the screen theme is */

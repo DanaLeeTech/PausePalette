@@ -17,10 +17,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
-# The site itself. spike.* is exploration, selftest.* is dev only.
+# The site itself. selftest.* is dev only.
 APP = [
     "index.html",
     "job.html",
+    "404.html",
     "app.js",
     "job.js",
     "render.js",
@@ -34,6 +35,7 @@ APP = [
     "icon-192.png",
     "icon-512.png",
     "icon-maskable.png",
+    "og-image.png",
     "manifest.webmanifest",
 ]
 DEV = [
