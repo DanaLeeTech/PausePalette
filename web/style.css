@@ -204,7 +204,7 @@ input[type=number] { max-width: 130px; }
 
 /* the first-colour picker in the stage-2 card */
 .first-colour {
-  display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin: 16px 0 4px;
+  display: flex; align-items: flex-start; flex-wrap: wrap; gap: 12px; margin: 16px 0 4px;
 }
 .first-colour label { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 13.5px; }
 .first-colour select {
@@ -213,7 +213,8 @@ input[type=number] { max-width: 130px; }
   box-shadow: 3px 3px 0 hsl(var(--ink)); font: inherit;
 }
 .first-colour .muted { font-size: 12.5px; }
-.first-colour details { flex-basis: 100%; }
+.first-colour .actions { display: flex; align-items: center; gap: 12px; }
+.first-colour details { margin: 0; }
 .first-colour details summary { cursor: pointer; font-size: 13.5px; }
 .first-colour details label { margin-top: 8px; }
 

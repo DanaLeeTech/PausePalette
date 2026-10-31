@@ -105,7 +105,6 @@ function stageTwoCard(job, page) {
       )
       .join("");
   const pins = (plan && plan.first_layer_order) || [];
-  const pinned = pins.slice(1).filter((pin) => pin !== null && pin !== undefined).length;
   // positions 2..N: "Auto" leaves the search free, a colour pins that spot
   const rest = choices
     .slice(1)
@@ -119,15 +118,17 @@ function stageTwoCard(job, page) {
   const picker =
     choices.length > 1
       ? `<form class="first-colour" id="firstColourForm">
-          <label>First colour printed
-            <select name="first_colour">${options(plan.first_colour, false)}</select>
-          </label>
           <details>
-            <summary>Set the exact order of the first layer${pinned ? ` (${pinned} set)` : ""}</summary>
+            <summary>Set the exact order of the first layer</summary>
+            <label>First colour printed
+              <select name="first_colour">${options(plan.first_colour, false)}</select>
+            </label>
             ${rest}
           </details>
-          <button class="btn ghost" type="submit">Regenerate plan</button>
-          <span class="muted">the plan is worked out again with the first layer in this order</span>
+          <div class="actions">
+            <button class="btn ghost" type="submit">Regenerate plan</button>
+            <span class="muted">the plan is worked out again with the first layer in this order</span>
+          </div>
         </form>`
       : "";
   const report = job.reorder_report || {};
