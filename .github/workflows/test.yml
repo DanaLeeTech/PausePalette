@@ -1,0 +1,32 @@
+name: Tests
+
+# Lint and the full Python suite on every push to main and every pull request.
+# The browser test in tests/test_pwa.py runs here too: it needs Chromium and
+# Pyodide from a CDN, which the runner has.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev]"
+      - run: ruff check .
+      - run: python -m playwright install --with-deps chromium
+      - run: python tools/make_sample.py
+      - run: python -m pytest -q

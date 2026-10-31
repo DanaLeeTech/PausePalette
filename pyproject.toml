@@ -12,13 +12,27 @@ license = { text = "MIT" }
 dependencies = []
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "pytest-playwright>=0.5", "pillow>=10"]
+dev = ["pytest>=8", "pytest-playwright>=0.5", "pillow>=10", "ruff>=0.4"]
 
 [project.scripts]
 pausepalette = "pausepalette.cli:main"
 
 [tool.setuptools]
 packages = ["pausepalette", "pausepalette.dialects"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+# ruff's long-standing default set, pinned: newer ruff releases select far more
+# rules, which would turn a version bump into a CI failure.
+select = ["E4", "E7", "E9", "F"]
+
+[tool.ruff.lint.per-file-ignores]
+# Test helpers keep values and imports that only document the fixture.
+"tests/*" = ["E741", "F401", "F841"]
+# `l` as a loop name in the vendored profile walkers.
+"tools/vendor_*.py" = ["E741"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
